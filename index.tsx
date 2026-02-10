@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import ReactDOM from 'react-dom/client';
 import { 
   Upload, Activity, Waves, Volume2, Bird, RefreshCw, Info, 
-  Keyboard, Square, Download, Circle, Loader2, Play, Music, Link as LinkIcon, Globe, CheckCircle
+  Keyboard, Square, Download, Circle, Loader2, Play, Music, Link as LinkIcon, Globe, CheckCircle, Search, X, FolderOpen, ChevronRight
 } from 'lucide-react';
 
 /** --- CONSTANTS & TYPES --- **/
@@ -18,16 +18,29 @@ const KEY_LABELS: Record<number, string> = {
   60: 'Q', 61: '2', 62: 'W', 63: '3', 64: 'E', 65: 'R', 66: '5', 67: 'T', 68: '6', 69: 'Y', 70: '7', 71: 'U', 72: 'I'
 };
 
-const BIRD_PRESETS = [
-  { name: "Nightingale", url: "https://raw.githubusercontent.com/google/music-spectrogram/master/static/audio/nightingale.mp3" },
-  { name: "Robin", url: "https://raw.githubusercontent.com/google/music-spectrogram/master/static/audio/robin.mp3" },
-  { name: "Blackbird", url: "https://raw.githubusercontent.com/google/music-spectrogram/master/static/audio/blackbird.mp3" }
+const BIRD_REPO_BASE = "https://raw.githubusercontent.com/muvarna/bird-signals/main/";
+const BIRD_FILES = [
+  "03 Downy Woodpecker Calls.mp3",
+  "04 Downy Woodpecker Drum.mp3",
+  "07 Northern Flicker Drum.mp3",
+  "08 Steller's Jay Call.mp3",
+  "09 Steller's Jay Calls.mp3",
+  "11 Black-capped Chickadee Song.mp3",
+  "12 Black-capped Chickadee Call.mp3",
+  "14 White-breasted Nuthatch Call 1.mp3",
+  "16 White-crowned Sparrow Song 1.mp3",
+  "17 White-crowned Sparrow Song 2.mp3",
+  "18 White-crowned Sparrow Call.mp3",
+  "19 Red-winged Blackbird Song.mp3",
+  "20 Red-winged Blackbird Calls.mp3",
+  "23 House Finch Song.mp3",
+  "25 Pine Siskin Song, Calls.mp3",
+  "27 Evening Grosbeak Calls.mp3"
 ];
 
 /** --- UTILS --- **/
 const convertToRawUrl = (url: string): string => {
   let processed = url.trim();
-  // Handle GitHub standard links: github.com/.../blob/main/... -> raw.githubusercontent.com/.../main/...
   if (processed.includes('github.com') && processed.includes('/blob/')) {
     processed = processed
       .replace('github.com', 'raw.githubusercontent.com')
@@ -113,6 +126,74 @@ async function extractStableSamples(audioBuffer: AudioBuffer, onProgress: (p: nu
 }
 
 /** --- COMPONENTS --- **/
+const BioRepositoryBrowser = ({ isOpen, onClose, onLoadBird }: any) => {
+  const [search, setSearch] = useState("");
+  
+  const filtered = useMemo(() => {
+    return BIRD_FILES.filter(f => f.toLowerCase().includes(search.toLowerCase()));
+  }, [search]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+      <div className="bg-slate-900 border border-slate-800 w-full max-w-2xl rounded-3xl shadow-2xl flex flex-col max-h-[80vh] overflow-hidden">
+        <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <FolderOpen className="w-5 h-5 text-cyan-400" />
+            <h2 className="text-xl font-black italic uppercase text-white tracking-tight">Bio-Repository</h2>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-full text-slate-400 transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        
+        <div className="p-4 bg-slate-950/50">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            <input 
+              type="text" 
+              placeholder="Filter bio-signals..." 
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:border-cyan-500 outline-none transition-all"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              autoFocus
+            />
+          </div>
+        </div>
+
+        <div className="flex-grow overflow-y-auto p-4 space-y-2 custom-scrollbar">
+          {filtered.map((bird) => (
+            <button 
+              key={bird}
+              onClick={() => onLoadBird(bird)}
+              className="w-full flex items-center justify-between p-4 rounded-2xl bg-slate-800/30 border border-slate-800 hover:border-cyan-500/50 hover:bg-slate-800/50 transition-all group"
+            >
+              <div className="flex items-center space-x-4">
+                <div className="p-2 bg-slate-950 rounded-lg group-hover:bg-cyan-950 text-slate-500 group-hover:text-cyan-400 transition-colors">
+                  <Bird className="w-5 h-5" />
+                </div>
+                <span className="text-sm font-bold text-slate-300 group-hover:text-white text-left">{bird.replace('.mp3', '')}</span>
+              </div>
+              <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-cyan-400 group-hover:translate-x-1 transition-all" />
+            </button>
+          ))}
+          {filtered.length === 0 && (
+            <div className="py-20 text-center">
+              <p className="text-slate-500 text-sm italic">No matching signals in repository.</p>
+            </div>
+          )}
+        </div>
+        
+        <div className="p-4 bg-slate-950/50 border-t border-slate-800 text-[10px] text-slate-600 flex justify-between uppercase font-bold tracking-widest">
+          <span>Source: muvarna/bird-signals</span>
+          <span>{BIRD_FILES.length} Samples</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const PianoKeyboard = ({ onNoteOn, onNoteOff, mappedNotes, activeNotes }: any) => {
   const keys = useMemo(() => {
     const list = [];
@@ -163,7 +244,7 @@ const SampleList = ({ samples, onPlaySample }: any) => {
   if (samples.length === 0) return (
     <div className="flex flex-col items-center justify-center p-12 bg-slate-900/50 rounded-xl border border-dashed border-slate-700 w-full">
       <Info className="w-12 h-12 text-slate-600 mb-4" />
-      <p className="text-slate-400 text-center">No stable segments detected.<br/>Upload or fetch a signal to start.</p>
+      <p className="text-slate-400 text-center">No stable segments detected.<br/>Select a bird from the Library.</p>
     </div>
   );
   return (
@@ -197,6 +278,7 @@ const App = () => {
   const [isEncoding, setIsEncoding] = useState(false);
   const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
   const [remoteUrl, setRemoteUrl] = useState("");
+  const [isBrowserOpen, setIsBrowserOpen] = useState(false);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const masterBusRef = useRef<GainNode | null>(null);
@@ -239,7 +321,7 @@ const App = () => {
   const loadFromUrl = async (url: string) => {
     if (!url) return;
     const finalUrl = convertToRawUrl(url);
-    setRemoteUrl(finalUrl); // Sync input UI with converted URL
+    setRemoteUrl(finalUrl); 
     
     setStatus({ status: 'loading', progress: 0.05, message: 'Fetching remote signal...' });
     try {
@@ -250,6 +332,12 @@ const App = () => {
     } catch (e) {
       setStatus({ status: 'error', progress: 0, message: 'Fetch Error (Try copying URL from browser bar)' });
     }
+  };
+
+  const loadBirdFromRepo = (filename: string) => {
+    const url = `${BIRD_REPO_BASE}${encodeURIComponent(filename)}`;
+    setIsBrowserOpen(false);
+    loadFromUrl(url);
   };
 
   const playNote = useCallback((midi: number) => {
@@ -345,6 +433,12 @@ const App = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-cyan-500/30">
+      <BioRepositoryBrowser 
+        isOpen={isBrowserOpen} 
+        onClose={() => setIsBrowserOpen(false)} 
+        onLoadBird={loadBirdFromRepo} 
+      />
+
       <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center space-x-3 shrink-0">
@@ -356,10 +450,18 @@ const App = () => {
           </div>
 
           <div className="hidden md:flex items-center mx-6 flex-1 space-x-2">
+            <button 
+              onClick={() => setIsBrowserOpen(true)}
+              className="flex items-center space-x-2 bg-slate-900 border border-slate-800 hover:border-cyan-500/50 px-4 py-2 rounded-full text-xs font-black uppercase italic text-cyan-400 transition-all"
+            >
+              <FolderOpen className="w-4 h-4" />
+              <span>Browse Bio-Library</span>
+            </button>
+
             <div className="relative flex-1 max-w-sm group">
               <input 
                 type="text" 
-                placeholder="Paste standard GitHub URL..." 
+                placeholder="Paste GitHub URL..." 
                 className="w-full bg-slate-950 border border-slate-800 rounded-full px-4 py-1.5 text-xs mono focus:border-cyan-500 outline-none transition-all pr-10 hover:border-slate-600"
                 value={remoteUrl}
                 onChange={(e) => setRemoteUrl(e.target.value)}
@@ -371,17 +473,6 @@ const App = () => {
               >
                 <LinkIcon className="w-3 h-3" />
               </button>
-            </div>
-            <div className="flex space-x-1">
-              {BIRD_PRESETS.map(preset => (
-                <button 
-                  key={preset.name}
-                  onClick={() => { setRemoteUrl(preset.url); loadFromUrl(preset.url); }}
-                  className="px-2 py-1 rounded bg-slate-800/50 border border-slate-700 text-[9px] font-bold uppercase hover:border-cyan-500 transition-all text-slate-400"
-                >
-                  {preset.name}
-                </button>
-              ))}
             </div>
           </div>
 
@@ -487,15 +578,11 @@ const App = () => {
             <div className="space-y-2 text-xs text-slate-300 leading-relaxed italic relative z-10">
               <p className="flex items-start">
                 <CheckCircle className="w-3 h-3 text-cyan-500 mr-2 shrink-0 mt-0.5" />
-                <span>Paste the link from your browser's address bar directly into the input above.</span>
+                <span>Use the <b>Bio-Library</b> browser to quickly load your GitHub signals.</span>
               </p>
               <p className="flex items-start">
                 <CheckCircle className="w-3 h-3 text-cyan-500 mr-2 shrink-0 mt-0.5" />
-                <span>Standard GitHub links containing <b>/blob/</b> are automatically converted to <b>raw</b> format for you.</span>
-              </p>
-              <p className="flex items-start opacity-70">
-                <Info className="w-3 h-3 text-slate-500 mr-2 shrink-0 mt-0.5" />
-                <span>Ensure your repository is <b>Public</b> so the DSP engine can fetch the binary signal.</span>
+                <span>Manual links containing <b>/blob/</b> are automatically converted for you.</span>
               </p>
             </div>
           </div>
