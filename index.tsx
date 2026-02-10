@@ -8,9 +8,9 @@ import {
 /** --- CONSTANTS & TYPES --- **/
 const MIDI_NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
-// Two-octave mapping
-// Lower octave: Z-row (starting at C3 = 48)
-// Upper octave: Q-row (starting at C4 = 60)
+// Two-octave mapping (Standard Tracker Layout)
+// Lower octave (C3 - C4): Z row
+// Upper octave (C4 - C5): Q row
 const COMPUTER_KEY_MAP: Record<string, number> = {
   // Lower Octave (C3 - C4)
   'z': 48, 's': 49, 'x': 50, 'd': 51, 'c': 52, 'v': 53, 'g': 54, 'b': 55, 'h': 56, 'n': 57, 'j': 58, 'm': 59, ',': 60,
@@ -103,7 +103,7 @@ async function extractStableSamples(audioBuffer: AudioBuffer, onProgress: (p: nu
 const PianoKeyboard = ({ onNoteOn, onNoteOff, mappedNotes, activeNotes }: any) => {
   const keys = useMemo(() => {
     const list = [];
-    // Full 2-octave range visual display
+    // Full 2-octave range display: MIDI 48 (C3) to MIDI 72 (C5)
     for (let i = 48; i <= 72; i++) list.push({ midi: i, isBlack: [1, 3, 6, 8, 10].includes(i % 12) });
     return list;
   }, []);
@@ -117,14 +117,25 @@ const PianoKeyboard = ({ onNoteOn, onNoteOff, mappedNotes, activeNotes }: any) =
           const computerKey = KEY_LABELS[key.midi];
           if (key.isBlack) {
             return (
-              <div key={key.midi} onMouseDown={() => onNoteOn(key.midi)} onMouseUp={() => onNoteOff(key.midi)} className={`absolute w-8 h-40 z-10 -ml-4 rounded-b-md cursor-pointer transition-all flex flex-col justify-end items-center pb-2 ${isActive ? 'bg-cyan-400' : 'bg-slate-950'} ${isMapped ? 'border-b-4 border-emerald-400' : 'border-b-2 border-slate-700'} hover:bg-slate-800 shadow-lg`} style={{ left: `${(keys.filter(k => !k.isBlack && k.midi < key.midi).length) * 3.5}rem` }}>
-                {computerKey && <span className={`text-[10px] font-black mono ${isActive ? 'text-slate-950' : 'text-slate-600'}`}>[{computerKey}]</span>}
+              <div 
+                key={key.midi} 
+                onMouseDown={() => onNoteOn(key.midi)} 
+                onMouseUp={() => onNoteOff(key.midi)} 
+                className={`absolute w-8 h-40 z-10 -ml-4 rounded-b-md cursor-pointer transition-all flex flex-col justify-end items-center pb-2 ${isActive ? 'bg-cyan-400' : 'bg-slate-950'} ${isMapped ? 'border-b-4 border-emerald-400' : 'border-b-2 border-slate-700'} hover:bg-slate-800 shadow-lg`} 
+                style={{ left: `${(keys.filter(k => !k.isBlack && k.midi < key.midi).length) * 3.5}rem` }}
+              >
+                {computerKey && <span className={`text-[10px] font-black mono pointer-events-none ${isActive ? 'text-slate-950' : 'text-slate-600'}`}>[{computerKey}]</span>}
               </div>
             );
           }
           return (
-            <div key={key.midi} onMouseDown={() => onNoteOn(key.midi)} onMouseUp={() => onNoteOff(key.midi)} className={`w-14 h-64 border border-slate-800 rounded-b-lg cursor-pointer transition-all flex flex-col justify-end items-center pb-4 ${isActive ? 'bg-cyan-100' : 'bg-slate-100'} ${isMapped ? 'ring-inset ring-2 ring-emerald-500' : ''} hover:bg-white`}>
-              <div className="flex flex-col items-center space-y-1">
+            <div 
+              key={key.midi} 
+              onMouseDown={() => onNoteOn(key.midi)} 
+              onMouseUp={() => onNoteOff(key.midi)} 
+              className={`w-14 h-64 border border-slate-800 rounded-b-lg cursor-pointer transition-all flex flex-col justify-end items-center pb-4 ${isActive ? 'bg-cyan-100' : 'bg-slate-100'} ${isMapped ? 'ring-inset ring-2 ring-emerald-500' : ''} hover:bg-white`}
+            >
+              <div className="flex flex-col items-center space-y-1 pointer-events-none">
                 {computerKey && <span className={`text-[10px] font-black mono ${isActive ? 'text-cyan-600' : 'text-slate-400'}`}>[{computerKey}]</span>}
                 <span className="text-[10px] font-bold text-slate-400 uppercase">{MIDI_NOTES[key.midi % 12]}{Math.floor(key.midi / 12) - 1}</span>
               </div>
@@ -138,7 +149,7 @@ const PianoKeyboard = ({ onNoteOn, onNoteOff, mappedNotes, activeNotes }: any) =
 
 const SampleList = ({ samples, onPlaySample }: any) => {
   if (samples.length === 0) return (
-    <div className="flex flex-col items-center justify-center p-12 bg-slate-900/50 rounded-xl border border-dashed border-slate-700">
+    <div className="flex flex-col items-center justify-center p-12 bg-slate-900/50 rounded-xl border border-dashed border-slate-700 w-full">
       <Info className="w-12 h-12 text-slate-600 mb-4" />
       <p className="text-slate-400 text-center">No stable segments detected.<br/>Upload a signal to start.</p>
     </div>
@@ -178,6 +189,7 @@ const App = () => {
   const masterBusRef = useRef<GainNode | null>(null);
   const scriptNodeRef = useRef<ScriptProcessorNode | null>(null);
   const recordedPCMRef = useRef<Float32Array[]>([]);
+  const activeSources = useRef<Map<number, AudioBufferSourceNode>>(new Map());
 
   const getAudioCtx = () => {
     if (!audioCtxRef.current) {
@@ -213,6 +225,7 @@ const App = () => {
     const ctx = getAudioCtx();
     if (ctx.state === 'suspended') ctx.resume();
     
+    // Polyphonic source tracking to prevent overlaps if needed, though samplers usually just stack
     let nearest = samples[0];
     let minDiff = Math.abs(samples[0].midiNote - midi);
     samples.forEach(s => { const d = Math.abs(s.midiNote - midi); if (d < minDiff) { minDiff = d; nearest = s; } });
@@ -220,16 +233,38 @@ const App = () => {
     const source = ctx.createBufferSource();
     source.buffer = nearest.buffer;
     source.playbackRate.value = Math.pow(2, (midi - nearest.midiNote) / 12);
+    
     const gainNode = ctx.createGain();
     gainNode.gain.setValueAtTime(0.4, ctx.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.5);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.5); // Fast decay for "plucky" samplers
+    
     source.connect(gainNode);
     if (masterBusRef.current) gainNode.connect(masterBusRef.current);
+    
     source.start();
     
     setActiveMidiNotes(prev => new Set(prev).add(midi));
-    source.onended = () => setActiveMidiNotes(prev => { const n = new Set(prev); n.delete(midi); return n; });
+    activeSources.current.set(midi, source);
+
+    source.onended = () => {
+      setActiveMidiNotes(prev => {
+        const next = new Set(prev);
+        next.delete(midi);
+        return next;
+      });
+      activeSources.current.delete(midi);
+    };
   }, [samples]);
+
+  const stopNote = useCallback((midi: number) => {
+    // We rely on the buffer ending or decay for now, but we immediately clear the visual state if the user releases
+    // To implement sustain, we'd need envelopes here.
+    setActiveMidiNotes(prev => {
+      const next = new Set(prev);
+      next.delete(midi);
+      return next;
+    });
+  }, []);
 
   const startRecording = () => {
     const ctx = getAudioCtx();
@@ -267,20 +302,30 @@ const App = () => {
     } catch (e) { console.error(e); } finally { setIsEncoding(false); }
   };
 
+  // Improved Keyboard Management
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Check if user is typing in an input
+      if (e.repeat) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
       const key = e.key.toLowerCase();
       const midi = COMPUTER_KEY_MAP[key];
       if (midi) {
-        e.preventDefault(); // Prevent scrolling/browsing shortcuts
-        if (!e.repeat) playNote(midi);
+        e.preventDefault();
+        playNote(midi);
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      const midi = COMPUTER_KEY_MAP[key];
+      if (midi) {
+        stopNote(midi);
       }
     };
     
     window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
     
     const resumeOnInteraction = () => {
         const ctx = getAudioCtx();
@@ -290,9 +335,10 @@ const App = () => {
     
     return () => {
         window.removeEventListener('keydown', handleKeyDown);
+        window.removeEventListener('keyup', handleKeyUp);
         window.removeEventListener('mousedown', resumeOnInteraction);
     };
-  }, [playNote]);
+  }, [playNote, stopNote]);
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-cyan-500/30">
@@ -374,16 +420,16 @@ const App = () => {
               <div className="flex items-center space-x-4">
                 <div className="px-3 py-1 rounded-md bg-slate-800 border border-slate-700 text-[10px] mono text-slate-400 flex items-center uppercase">
                   <Keyboard className="w-3 h-3 mr-2 text-cyan-400" />
-                  Tracker Layout: QWERTY + ZXCVB
+                  Tracker Layout: ZXCVB (Low) / QWERTY (High)
                 </div>
               </div>
             </div>
-            <PianoKeyboard onNoteOn={playNote} onNoteOff={() => {}} mappedNotes={new Set(samples.map(s => s.midiNote))} activeNotes={activeMidiNotes} />
+            <PianoKeyboard onNoteOn={playNote} onNoteOff={stopNote} mappedNotes={new Set(samples.map(s => s.midiNote))} activeNotes={activeMidiNotes} />
           </section>
         </div>
 
         <div className="lg:col-span-4 space-y-6">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col h-full shadow-2xl overflow-hidden">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col h-full shadow-2xl overflow-hidden min-h-[500px]">
             <div className="flex items-center justify-between mb-6">
               <h2 className="font-black uppercase italic text-sm flex items-center space-x-2 text-white">
                 <RefreshCw className={`w-4 h-4 text-cyan-400 ${status.status === 'analyzing' ? 'animate-spin' : ''}`} />
@@ -404,7 +450,7 @@ const App = () => {
               SYSTEM INFO
             </h3>
             <p className="text-xs text-slate-300 leading-relaxed italic relative z-10">
-              "2-Octave Tracker layout enabled. Bottom row (Z to M) covers Octave 3. Top row (Q to I) covers Octave 4. Black keys are mapped to number/middle row keys."
+              "2-Octave Tracker layout enabled. Bottom row (Z to M) covers Octave 3. Top row (Q to I) covers Octave 4. High-fidelity pitch tracking active."
             </p>
           </div>
         </div>
