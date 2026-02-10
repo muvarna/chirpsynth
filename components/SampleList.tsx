@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { AudioSample } from '../types';
+import { AudioSample } from '../types.ts';
 import { Play, Music, Info } from 'lucide-react';
 
 interface SampleListProps {
@@ -34,7 +34,6 @@ const SampleList: React.FC<SampleListProps> = ({ samples, onPlaySample }) => {
               <p className="text-xs text-slate-500 mono">{sample.frequency.toFixed(2)} Hz</p>
             </div>
           </div>
-          
           <button 
             onClick={() => onPlaySample(sample)}
             className="p-3 rounded-full bg-slate-800 text-slate-400 hover:bg-cyan-500 hover:text-white transition-colors"
