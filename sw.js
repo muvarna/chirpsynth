@@ -1,15 +1,10 @@
 
-const CACHE_NAME = 'chirpsynth-v1.6';
+const CACHE_NAME = 'chirpsynth-v1.7';
 const ASSETS = [
   './',
   './index.html',
   './index.tsx',
-  './App.tsx',
-  './types.ts',
-  './manifest.json',
-  './services/dspService.ts',
-  './components/PianoKeyboard.tsx',
-  './components/SampleList.tsx'
+  './manifest.json'
 ];
 
 self.addEventListener('install', (event) => {
@@ -38,28 +33,22 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // MIME PROXY: If requesting a TSX or TS file, manually set header to JS
+  // MIME PROXY: Force correct Content-Type for TSX/TS files to satisfy strict browser checks
   if (url.origin === location.origin && (url.pathname.endsWith('.tsx') || url.pathname.endsWith('.ts'))) {
     event.respondWith(
       fetch(event.request).then(response => {
-        // Create a copy of the response with the correct Content-Type header
         const newHeaders = new Headers(response.headers);
         newHeaders.set('Content-Type', 'application/javascript');
-        
         return new Response(response.body, {
           status: response.status,
           statusText: response.statusText,
           headers: newHeaders
         });
-      }).catch(err => {
-        // Fallback to cache if network fails
-        return caches.match(event.request);
-      })
+      }).catch(() => caches.match(event.request))
     );
     return;
   }
 
-  // Standard caching for other assets
   event.respondWith(
     caches.match(event.request).then((response) => {
       return response || fetch(event.request);
