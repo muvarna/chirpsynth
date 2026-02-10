@@ -1,9 +1,9 @@
 This is a synth that takes a bird call/song file from freely available recordings 
 in this repository: https://github.com/muvarna/bird-signals/tree/main  
-It isolates a short, more or less stable, part from it to use as a note. 
-The keyboard can be played both with the mouse and keys.
+It isolates a short part from the sample, with more or less stable pitch, to use as a note. 
+The keyboard can be played with both the mouse and keys.
 The output can be recorded in mp3. A new random bird loads each time the app is opened.
-
+You can also load your own audio file in mp3. 
 
 These are the birds: 
 
