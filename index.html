@@ -97,10 +97,8 @@
       window.onerror = (msg, url, line, col) => showError(`${msg}\nFile: ${url}\nLine: ${line}:${col}`);
       window.onunhandledrejection = (event) => showError(`Promise Rejection: ${event.reason}`);
 
-      // Manual Bootstrapper: Fetches TSX, transforms it via Babel, and injects as a module.
       async function boot() {
         try {
-          // Add cache-busting to ensure we always get the latest code
           const resp = await fetch('./index.tsx?v=' + Date.now());
           if (!resp.ok) throw new Error(`Failed to load index.tsx: ${resp.status}`);
           const tsxCode = await resp.text();
@@ -119,9 +117,6 @@
           showError(e.message);
         }
       }
-
-      // Start the application immediately. Service workers are disabled
-      // as they frequently fail with origin mismatch in development sandboxes.
       boot();
     </script>
 </body>
