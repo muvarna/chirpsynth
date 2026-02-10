@@ -38,7 +38,6 @@
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
             background: #06b6d4;
         }
-        /* Loading fallback styles */
         #root:empty::before {
             content: 'INITIALIZING BIOACOUSTIC ENGINE...';
             position: absolute;
@@ -90,7 +89,7 @@
     <div id="root"></div>
     <div id="error-display"></div>
     <script>
-      console.log("DOM_READY: Initializing boot sequence...");
+      console.log("DOM_READY: Starting boot process...");
       
       const errDisp = document.getElementById('error-display');
       function showError(msg) {
@@ -107,26 +106,36 @@
         showError(`Promise Rejection: ${event.reason}`);
       };
 
+      // Register MIME-fixing Service Worker
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js').then(reg => {
-            console.log("SW_REGISTERED");
-            reg.onupdatefound = () => {
-              const installingWorker = reg.installing;
-              installingWorker.onstatechange = () => {
-                if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                  console.log("SW_UPDATE_FOUND: Reloading for fresh session...");
-                  window.location.reload();
-                }
-              };
+        navigator.serviceWorker.register('./sw.js').then(reg => {
+          console.log("SW_REGISTERED");
+          reg.onupdatefound = () => {
+            const installingWorker = reg.installing;
+            installingWorker.onstatechange = () => {
+              if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                console.log("SW_UPDATE: Reloading to apply MIME-fixer...");
+                window.location.reload();
+              }
             };
-          }).catch(err => {
-            console.warn('SW_FAILED: ', err);
-          });
+          };
+        }).catch(err => {
+          showError('ServiceWorker failed: ' + err);
         });
+
+        // Wait for Service Worker to be active before injecting the module script
+        navigator.serviceWorker.ready.then(() => {
+          console.log("SW_READY: Injecting app module...");
+          const script = document.createElement('script');
+          script.type = 'text/babel';
+          script.dataset.presets = 'react,typescript';
+          script.dataset.type = 'module';
+          script.src = './index.tsx';
+          document.body.appendChild(script);
+        });
+      } else {
+        showError('Your browser does not support Service Workers. This app requires them to handle MIME types.');
       }
     </script>
-    <!-- Transpile TSX on the fly with Babel for Zero-Build deployment -->
-    <script type="text/babel" data-presets="react,typescript" data-type="module" src="./index.tsx"></script>
 </body>
 </html>
