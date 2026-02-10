@@ -301,10 +301,10 @@ const App = () => {
     const ctx = getAudioCtx();
     if (ctx.state === 'suspended') ctx.resume();
     
-    setStatus({ status: 'loading', progress: 0.1, message: 'Decoding audio stream...' });
+    setStatus(prev => ({ ...prev, status: 'loading', progress: 0.1, message: 'Decoding audio stream...' }));
     try {
       const decodedBuffer = await ctx.decodeAudioData(arrayBuffer);
-      setStatus({ status: 'analyzing', progress: 0.2, message: 'Performing Bioacoustic Extraction...' });
+      setStatus(prev => ({ ...prev, status: 'analyzing', progress: 0.2, message: 'Performing Bioacoustic Extraction...' }));
       const extracted = await extractStableSamples(decodedBuffer, p => setStatus(prev => ({ ...prev, progress: 0.2 + (p * 0.8) })));
       setSamples(extracted);
       setStatus({ status: 'completed', progress: 1.0, message: `System online: ${extracted.length} bio-samples active` });
@@ -325,22 +325,34 @@ const App = () => {
     const finalUrl = convertToRawUrl(url);
     setRemoteUrl(finalUrl); 
     
-    setStatus({ status: 'loading', progress: 0.05, message: 'Fetching remote signal...' });
+    setStatus(prev => ({ ...prev, status: 'loading', progress: 0.05, message: 'Fetching remote signal...' }));
     try {
       const resp = await fetch(finalUrl);
       if (!resp.ok) throw new Error('Fetch failed');
       const buf = await resp.arrayBuffer();
       processAudioData(buf);
     } catch (e) {
-      setStatus({ status: 'error', progress: 0, message: 'Fetch Error (Try copying URL from browser bar)' });
+      setStatus({ status: 'error', progress: 0, message: 'Fetch Error (Check your connection)' });
     }
   };
 
-  const loadBirdFromRepo = (filename: string) => {
+  const loadBirdFromRepo = useCallback((filename: string) => {
     const url = `${BIRD_REPO_BASE}${encodeURIComponent(filename)}`;
     setIsBrowserOpen(false);
     loadFromUrl(url);
-  };
+  }, []);
+
+  // AUTO-LOAD RANDOM SAMPLE ON MOUNT
+  useEffect(() => {
+    const randomIndex = Math.floor(Math.random() * BIRD_FILES.length);
+    const randomBird = BIRD_FILES[randomIndex];
+    // Slightly delay to ensure initialization
+    const timer = setTimeout(() => {
+      setStatus(prev => ({ ...prev, status: 'loading', message: `Auto-importing random bio-signal: ${randomBird.replace('.mp3', '')}...` }));
+      loadBirdFromRepo(randomBird);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [loadBirdFromRepo]);
 
   const playNote = useCallback((midi: number) => {
     if (samples.length === 0) return;
@@ -626,7 +638,7 @@ const App = () => {
           </div>
           <div className="flex space-x-6 text-[8px] md:text-[10px] mono uppercase font-bold tracking-[0.2em]">
             <span>Bio-Library Active</span>
-            <span className="hidden xs:inline">16_SIGNALS_LOADED</span>
+            <span className="hidden xs:inline">{BIRD_FILES.length}_SIGNALS_LOADED</span>
           </div>
         </div>
       </footer>
