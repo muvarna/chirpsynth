@@ -1,29 +1,35 @@
-This is a synth that takes a bird call/song file from freely available recordings 
-in this repository: https://github.com/muvarna/bird-signals/tree/main  
-It isolates a short part from the sample, with more or less stable pitch, to use as a note. 
-The keyboard can be played with both the mouse and keys.
-The output can be recorded in mp3. A new random bird loads each time the app is opened.
-You can also load your own audio file in mp3. 
+# 🦜 Bird Song Sampler Synth
+An interactive web-based synthesizer that transforms real bird vocalizations into playable musical instruments.
 
-These are the birds: 
+## 🚀 [Play the Synth Live Here!](https://muvarna.github.io/chirpsynth/)
 
-03 Downy Woodpecker Calls.mp3  
-04 Downy Woodpecker Drum.mp3  
-07 Northern Flicker Drum.mp3  
-08 Steller's Jay Call.mp3  
-09 Steller's Jay Calls.mp3  
-11 Black-capped Chickadee Song.mp3  
-12 Black-capped Chickadee Call.mp3  
-14 White-breasted Nuthatch Call 1.mp3  
-16 White-crowned Sparrow Song 1.mp3  
-17 White-crowned Sparrow Song 2.mp3  
-18 White-crowned Sparrow Call.mp3  
-19 Red-winged Blackbird Song.mp3  
-20 Red-winged Blackbird Calls.mp3  
-23 House Finch Song.mp3  
-25 Pine Siskin Song, Calls.mp3  
-27 Evening Grosbeak Calls.mp3  
+---
 
+## 🎵 How it Works
+This app utilizes Digital Signal Processing (DSP) to bridge the gap between nature and music:
+1. **Source:** It pulls bird calls/songs from the [Cornell Lab of Ornithology](https://dl.allaboutbirds.org/backyardbirdsdownload-0).
+2. **Analysis:** The engine isolates segments with a **stable pitch** to ensure the sample is musical.
+3. **Synthesis:** These segments are mapped to a keyboard, allowing you to play "nature" like a MIDI instrument.
 
-The files are freely available from the Cornell Lab of Ornithology:
-https://dl.allaboutbirds.org/backyardbirdsdownload-0
+## 🎹 Features
+* **Playable Keyboard:** Use your mouse or computer keys to play the bird notes.
+* **Auto-Load:** A new random bird loads every time you refresh the app.
+* **Custom Audio:** You can upload your own `.mp3` bird recordings to create custom synths.
+* **Record:** Export your performances directly to `.mp3`.
+
+## 🐦 Included Bird Species
+The repository currently features a library of signals from:
+* **Woodpeckers:** Downy Woodpecker (Calls & Drum), Northern Flicker (Drum)
+* **Jays & Chickadees:** Steller's Jay, Black-capped Chickadee
+* **Songbirds:** White-crowned Sparrow, Red-winged Blackbird, House Finch
+* **Others:** White-breasted Nuthatch, Pine Siskin, Evening Grosbeak
+
+---
+
+## 📂 Data Sources
+The audio files used in this project are sourced from:
+* **Bird Signals Repo:** [muvarna/bird-signals](https://github.com/muvarna/bird-signals/tree/main)
+* **Original Audio:** [Cornell Lab of Ornithology](https://dl.allaboutbirds.org/backyardbirdsdownload-0)
+
+---
+*Created with love for birders and musicians alike.*
