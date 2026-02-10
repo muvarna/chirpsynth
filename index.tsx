@@ -2,25 +2,38 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import ReactDOM from 'react-dom/client';
 import { 
   Upload, Activity, Waves, Volume2, Bird, RefreshCw, Info, 
-  Keyboard, Square, Download, Circle, Loader2, Play, Music 
+  Keyboard, Square, Download, Circle, Loader2, Play, Music, Link as LinkIcon, Globe, CheckCircle
 } from 'lucide-react';
 
 /** --- CONSTANTS & TYPES --- **/
 const MIDI_NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
-// Two-octave mapping (Standard Tracker Layout)
-// Lower octave (C3 - C4): Z row
-// Upper octave (C4 - C5): Q row
 const COMPUTER_KEY_MAP: Record<string, number> = {
-  // Lower Octave (C3 - C4)
   'z': 48, 's': 49, 'x': 50, 'd': 51, 'c': 52, 'v': 53, 'g': 54, 'b': 55, 'h': 56, 'n': 57, 'j': 58, 'm': 59, ',': 60,
-  // Upper Octave (C4 - C5)
   'q': 60, '2': 61, 'w': 62, '3': 63, 'e': 64, 'r': 65, '5': 66, 't': 67, '6': 68, 'y': 69, '7': 70, 'u': 71, 'i': 72
 };
 
 const KEY_LABELS: Record<number, string> = {
   48: 'Z', 49: 'S', 50: 'X', 51: 'D', 52: 'C', 53: 'V', 54: 'G', 55: 'B', 56: 'H', 57: 'N', 58: 'J', 59: 'M',
   60: 'Q', 61: '2', 62: 'W', 63: '3', 64: 'E', 65: 'R', 66: '5', 67: 'T', 68: '6', 69: 'Y', 70: '7', 71: 'U', 72: 'I'
+};
+
+const BIRD_PRESETS = [
+  { name: "Nightingale", url: "https://raw.githubusercontent.com/google/music-spectrogram/master/static/audio/nightingale.mp3" },
+  { name: "Robin", url: "https://raw.githubusercontent.com/google/music-spectrogram/master/static/audio/robin.mp3" },
+  { name: "Blackbird", url: "https://raw.githubusercontent.com/google/music-spectrogram/master/static/audio/blackbird.mp3" }
+];
+
+/** --- UTILS --- **/
+const convertToRawUrl = (url: string): string => {
+  let processed = url.trim();
+  // Handle GitHub standard links: github.com/.../blob/main/... -> raw.githubusercontent.com/.../main/...
+  if (processed.includes('github.com') && processed.includes('/blob/')) {
+    processed = processed
+      .replace('github.com', 'raw.githubusercontent.com')
+      .replace('/blob/', '/');
+  }
+  return processed;
 };
 
 /** --- DSP UTILS --- **/
@@ -103,7 +116,6 @@ async function extractStableSamples(audioBuffer: AudioBuffer, onProgress: (p: nu
 const PianoKeyboard = ({ onNoteOn, onNoteOff, mappedNotes, activeNotes }: any) => {
   const keys = useMemo(() => {
     const list = [];
-    // Full 2-octave range display: MIDI 48 (C3) to MIDI 72 (C5)
     for (let i = 48; i <= 72; i++) list.push({ midi: i, isBlack: [1, 3, 6, 8, 10].includes(i % 12) });
     return list;
   }, []);
@@ -151,7 +163,7 @@ const SampleList = ({ samples, onPlaySample }: any) => {
   if (samples.length === 0) return (
     <div className="flex flex-col items-center justify-center p-12 bg-slate-900/50 rounded-xl border border-dashed border-slate-700 w-full">
       <Info className="w-12 h-12 text-slate-600 mb-4" />
-      <p className="text-slate-400 text-center">No stable segments detected.<br/>Upload a signal to start.</p>
+      <p className="text-slate-400 text-center">No stable segments detected.<br/>Upload or fetch a signal to start.</p>
     </div>
   );
   return (
@@ -184,12 +196,12 @@ const App = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [isEncoding, setIsEncoding] = useState(false);
   const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
+  const [remoteUrl, setRemoteUrl] = useState("");
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const masterBusRef = useRef<GainNode | null>(null);
   const scriptNodeRef = useRef<ScriptProcessorNode | null>(null);
   const recordedPCMRef = useRef<Float32Array[]>([]);
-  const activeSources = useRef<Map<number, AudioBufferSourceNode>>(new Map());
 
   const getAudioCtx = () => {
     if (!audioCtxRef.current) {
@@ -201,22 +213,42 @@ const App = () => {
     return audioCtxRef.current;
   };
 
-  const handleFileUpload = async (event: any) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const processAudioData = async (arrayBuffer: ArrayBuffer) => {
     const ctx = getAudioCtx();
     if (ctx.state === 'suspended') ctx.resume();
     
-    setStatus({ status: 'loading', progress: 0.1, message: 'Decoding audio...' });
+    setStatus({ status: 'loading', progress: 0.1, message: 'Decoding audio stream...' });
     try {
-      const decodedBuffer = await ctx.decodeAudioData(await file.arrayBuffer());
-      setStatus({ status: 'analyzing', progress: 0.2, message: 'Analyzing Bio-patterns...' });
+      const decodedBuffer = await ctx.decodeAudioData(arrayBuffer);
+      setStatus({ status: 'analyzing', progress: 0.2, message: 'Performing Bioacoustic Extraction...' });
       const extracted = await extractStableSamples(decodedBuffer, p => setStatus(prev => ({ ...prev, progress: 0.2 + (p * 0.8) })));
       setSamples(extracted);
-      setStatus({ status: 'completed', progress: 1.0, message: `Captured ${extracted.length} bio-samples` });
+      setStatus({ status: 'completed', progress: 1.0, message: `System online: ${extracted.length} bio-samples active` });
     } catch (err) { 
       console.error(err);
-      setStatus({ status: 'error', progress: 0, message: 'DSP Failure' }); 
+      setStatus({ status: 'error', progress: 0, message: 'DSP Pipeline Failure' }); 
+    }
+  };
+
+  const handleFileUpload = async (event: any) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    processAudioData(await file.arrayBuffer());
+  };
+
+  const loadFromUrl = async (url: string) => {
+    if (!url) return;
+    const finalUrl = convertToRawUrl(url);
+    setRemoteUrl(finalUrl); // Sync input UI with converted URL
+    
+    setStatus({ status: 'loading', progress: 0.05, message: 'Fetching remote signal...' });
+    try {
+      const resp = await fetch(finalUrl);
+      if (!resp.ok) throw new Error('Fetch failed');
+      const buf = await resp.arrayBuffer();
+      processAudioData(buf);
+    } catch (e) {
+      setStatus({ status: 'error', progress: 0, message: 'Fetch Error (Try copying URL from browser bar)' });
     }
   };
 
@@ -225,7 +257,6 @@ const App = () => {
     const ctx = getAudioCtx();
     if (ctx.state === 'suspended') ctx.resume();
     
-    // Polyphonic source tracking to prevent overlaps if needed, though samplers usually just stack
     let nearest = samples[0];
     let minDiff = Math.abs(samples[0].midiNote - midi);
     samples.forEach(s => { const d = Math.abs(s.midiNote - midi); if (d < minDiff) { minDiff = d; nearest = s; } });
@@ -233,43 +264,26 @@ const App = () => {
     const source = ctx.createBufferSource();
     source.buffer = nearest.buffer;
     source.playbackRate.value = Math.pow(2, (midi - nearest.midiNote) / 12);
-    
     const gainNode = ctx.createGain();
     gainNode.gain.setValueAtTime(0.4, ctx.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.5); // Fast decay for "plucky" samplers
-    
+    gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.5);
     source.connect(gainNode);
     if (masterBusRef.current) gainNode.connect(masterBusRef.current);
-    
     source.start();
     
     setActiveMidiNotes(prev => new Set(prev).add(midi));
-    activeSources.current.set(midi, source);
-
     source.onended = () => {
-      setActiveMidiNotes(prev => {
-        const next = new Set(prev);
-        next.delete(midi);
-        return next;
-      });
-      activeSources.current.delete(midi);
+      setActiveMidiNotes(prev => { const n = new Set(prev); n.delete(midi); return n; });
     };
   }, [samples]);
 
   const stopNote = useCallback((midi: number) => {
-    // We rely on the buffer ending or decay for now, but we immediately clear the visual state if the user releases
-    // To implement sustain, we'd need envelopes here.
-    setActiveMidiNotes(prev => {
-      const next = new Set(prev);
-      next.delete(midi);
-      return next;
-    });
+    setActiveMidiNotes(prev => { const n = new Set(prev); n.delete(midi); return n; });
   }, []);
 
   const startRecording = () => {
     const ctx = getAudioCtx();
     if (ctx.state === 'suspended') ctx.resume();
-    
     const node = ctx.createScriptProcessor(4096, 1, 1);
     recordedPCMRef.current = [];
     node.onaudioprocess = e => recordedPCMRef.current.push(new Float32Array(e.inputBuffer.getChannelData(0)));
@@ -302,37 +316,26 @@ const App = () => {
     } catch (e) { console.error(e); } finally { setIsEncoding(false); }
   };
 
-  // Improved Keyboard Management
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.repeat) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-
       const key = e.key.toLowerCase();
       const midi = COMPUTER_KEY_MAP[key];
-      if (midi) {
-        e.preventDefault();
-        playNote(midi);
-      }
+      if (midi) { e.preventDefault(); playNote(midi); }
     };
-
     const handleKeyUp = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
       const midi = COMPUTER_KEY_MAP[key];
-      if (midi) {
-        stopNote(midi);
-      }
+      if (midi) stopNote(midi);
     };
-    
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
-    
     const resumeOnInteraction = () => {
         const ctx = getAudioCtx();
         if (ctx.state === 'suspended') ctx.resume();
     };
     window.addEventListener('mousedown', resumeOnInteraction);
-    
     return () => {
         window.removeEventListener('keydown', handleKeyDown);
         window.removeEventListener('keyup', handleKeyUp);
@@ -344,43 +347,75 @@ const App = () => {
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-cyan-500/30">
       <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3 shrink-0">
             <div className="p-2 bg-cyan-500 rounded-lg shadow-lg shadow-cyan-500/20"><Bird className="w-6 h-6 text-slate-950" /></div>
             <div>
-              <h1 className="text-xl font-black tracking-tighter uppercase italic text-white">ChirpSynth</h1>
+              <h1 className="text-xl font-black tracking-tighter uppercase italic text-white leading-none">ChirpSynth</h1>
               <p className="text-[10px] mono text-cyan-400 font-bold tracking-widest leading-tight uppercase">Bioacoustic Sampler</p>
             </div>
           </div>
-          <div className="flex items-center space-x-6">
-            <div className="flex items-center space-x-2 bg-slate-950/50 p-1.5 rounded-full border border-slate-800">
+
+          <div className="hidden md:flex items-center mx-6 flex-1 space-x-2">
+            <div className="relative flex-1 max-w-sm group">
+              <input 
+                type="text" 
+                placeholder="Paste standard GitHub URL..." 
+                className="w-full bg-slate-950 border border-slate-800 rounded-full px-4 py-1.5 text-xs mono focus:border-cyan-500 outline-none transition-all pr-10 hover:border-slate-600"
+                value={remoteUrl}
+                onChange={(e) => setRemoteUrl(e.target.value)}
+              />
+              <button 
+                onClick={() => loadFromUrl(remoteUrl)}
+                title="Fetch and Auto-Convert GitHub Links"
+                className="absolute right-1 top-1 bottom-1 px-3 rounded-full bg-slate-800 text-cyan-400 hover:bg-cyan-500 hover:text-white transition-all flex items-center justify-center"
+              >
+                <LinkIcon className="w-3 h-3" />
+              </button>
+            </div>
+            <div className="flex space-x-1">
+              {BIRD_PRESETS.map(preset => (
+                <button 
+                  key={preset.name}
+                  onClick={() => { setRemoteUrl(preset.url); loadFromUrl(preset.url); }}
+                  className="px-2 py-1 rounded bg-slate-800/50 border border-slate-700 text-[9px] font-bold uppercase hover:border-cyan-500 transition-all text-slate-400"
+                >
+                  {preset.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-4 shrink-0">
+            <div className="flex items-center space-x-2 bg-slate-950/50 p-1 rounded-full border border-slate-800">
               {!isRecording ? (
-                <button onClick={startRecording} disabled={samples.length === 0 || isEncoding} className="flex items-center space-x-2 px-4 py-1.5 rounded-full bg-slate-900 hover:bg-slate-800 text-red-500 font-bold text-xs transition-all disabled:opacity-30 group">
+                <button onClick={startRecording} disabled={samples.length === 0 || isEncoding} className="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-slate-900 hover:bg-slate-800 text-red-500 font-bold text-[10px] transition-all disabled:opacity-30 group">
                   {isEncoding ? <Loader2 className="w-3 h-3 animate-spin" /> : <Circle className="w-3 h-3 fill-red-500" />}
-                  <span>{isEncoding ? 'ENCODING...' : 'REC MP3'}</span>
+                  <span>{isEncoding ? 'ENCODING' : 'REC MP3'}</span>
                 </button>
               ) : (
-                <button onClick={stopRecording} className="flex items-center space-x-2 px-4 py-1.5 rounded-full bg-red-500 text-white font-bold text-xs transition-all animate-pulse">
+                <button onClick={stopRecording} className="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-red-500 text-white font-bold text-[10px] transition-all animate-pulse">
                   <Square className="w-3 h-3 fill-white" />
-                  <span>STOP & RENDER</span>
+                  <span>STOP</span>
                 </button>
               )}
               {recordedUrl && (
-                <a href={recordedUrl} download="chirpsynth.mp3" className="flex items-center space-x-2 px-4 py-1.5 rounded-full bg-emerald-500 text-slate-950 font-bold text-xs transition-all hover:bg-emerald-400">
+                <a href={recordedUrl} download="chirpsynth.mp3" className="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500 text-slate-950 font-bold text-[10px] transition-all hover:bg-emerald-400">
                   <Download className="w-3 h-3" />
-                  <span>SAVE MP3</span>
+                  <span>SAVE</span>
                 </a>
               )}
             </div>
             <label className="cursor-pointer">
               <input type="file" accept="audio/*" onChange={handleFileUpload} className="hidden" />
-              <div className="bg-white hover:bg-slate-200 text-slate-950 px-6 py-2 rounded-full font-black text-xs uppercase flex items-center space-x-2 transition-all">
+              <div className="bg-white hover:bg-slate-200 text-slate-950 px-4 py-2 rounded-full font-black text-[10px] uppercase flex items-center space-x-2 transition-all">
                 <Upload className="w-4 h-4" />
-                <span>LOAD SIGNAL</span>
+                <span>LOAD</span>
               </div>
             </label>
           </div>
         </div>
       </header>
+
       <main className="flex-grow max-w-7xl mx-auto w-full p-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-8 space-y-8">
           {(status.status === 'analyzing' || status.status === 'loading') && (
@@ -390,7 +425,7 @@ const App = () => {
                 <span className="mono text-cyan-400">{(status.progress * 100).toFixed(0)}%</span>
               </div>
               <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                <div className="h-full bg-cyan-500 transition-all duration-300" style={{ width: `${status.progress * 100}%` }} />
+                <div className="h-full bg-cyan-500 transition-all duration-300 shadow-[0_0_10px_rgba(6,182,212,0.5)]" style={{ width: `${status.progress * 100}%` }} />
               </div>
               <p className="mt-4 text-sm text-slate-400 italic">“{status.message}”</p>
             </div>
@@ -420,7 +455,7 @@ const App = () => {
               <div className="flex items-center space-x-4">
                 <div className="px-3 py-1 rounded-md bg-slate-800 border border-slate-700 text-[10px] mono text-slate-400 flex items-center uppercase">
                   <Keyboard className="w-3 h-3 mr-2 text-cyan-400" />
-                  Tracker Layout: ZXCVB (Low) / QWERTY (High)
+                  Tracker Layout Active
                 </div>
               </div>
             </div>
@@ -446,12 +481,23 @@ const App = () => {
           <div className="bg-gradient-to-br from-cyan-950/40 to-slate-900 border border-cyan-800/30 rounded-2xl p-6 shadow-xl relative overflow-hidden">
             <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-500/5 blur-3xl rounded-full -mr-12 -mt-12" />
             <h3 className="font-bold text-[10px] text-cyan-400 uppercase mb-3 flex items-center tracking-widest">
-              <Info className="w-3 h-3 mr-2" />
-              SYSTEM INFO
+              <Globe className="w-3 h-3 mr-2" />
+              REMOTE AUTO-IMPORT
             </h3>
-            <p className="text-xs text-slate-300 leading-relaxed italic relative z-10">
-              "2-Octave Tracker layout enabled. Bottom row (Z to M) covers Octave 3. Top row (Q to I) covers Octave 4. High-fidelity pitch tracking active."
-            </p>
+            <div className="space-y-2 text-xs text-slate-300 leading-relaxed italic relative z-10">
+              <p className="flex items-start">
+                <CheckCircle className="w-3 h-3 text-cyan-500 mr-2 shrink-0 mt-0.5" />
+                <span>Paste the link from your browser's address bar directly into the input above.</span>
+              </p>
+              <p className="flex items-start">
+                <CheckCircle className="w-3 h-3 text-cyan-500 mr-2 shrink-0 mt-0.5" />
+                <span>Standard GitHub links containing <b>/blob/</b> are automatically converted to <b>raw</b> format for you.</span>
+              </p>
+              <p className="flex items-start opacity-70">
+                <Info className="w-3 h-3 text-slate-500 mr-2 shrink-0 mt-0.5" />
+                <span>Ensure your repository is <b>Public</b> so the DSP engine can fetch the binary signal.</span>
+              </p>
+            </div>
           </div>
         </div>
       </main>
