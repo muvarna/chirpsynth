@@ -19,12 +19,11 @@
             background-color: #020617;
             color: #f8fafc;
             overflow-x: hidden;
+            margin: 0;
+            padding: 0;
         }
         .mono {
-            font-family: 'JetBrains+Mono', monospace;
-        }
-        .waveform-container canvas {
-            image-rendering: pixelated;
+            font-family: 'JetBrains Mono', monospace;
         }
         .custom-scrollbar::-webkit-scrollbar {
             width: 4px;
@@ -39,18 +38,34 @@
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
             background: #06b6d4;
         }
+        /* Loading fallback styles */
+        #root:empty::before {
+            content: 'INITIALIZING BIOACOUSTIC ENGINE...';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            letter-spacing: 0.3em;
+            color: #06b6d4;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
     </style>
 <script type="importmap">
 {
   "imports": {
-    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "react": "https://esm.sh/react@^19.2.4"
+    "lucide-react": "https://esm.sh/lucide-react@0.460.0",
+    "react-dom/": "https://esm.sh/react-dom@19.0.0/",
+    "react/": "https://esm.sh/react@19.0.0/",
+    "react": "https://esm.sh/react@19.0.0"
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
 </head>
 <body>
     <div id="root"></div>
@@ -58,7 +73,17 @@
       // Register Service Worker for PWA functionality
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js').catch(err => {
+          navigator.serviceWorker.register('./sw.js').then(reg => {
+            reg.onupdatefound = () => {
+              const installingWorker = reg.installing;
+              installingWorker.onstatechange = () => {
+                if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  // New version available, reload
+                  window.location.reload();
+                }
+              };
+            };
+          }).catch(err => {
             console.log('ServiceWorker registration failed: ', err);
           });
         });
@@ -66,6 +91,5 @@
     </script>
     <!-- Transpile TSX on the fly with Babel for Zero-Build deployment -->
     <script type="text/babel" data-presets="react,typescript" data-type="module" src="index.tsx"></script>
-<script type="module" src="/index.tsx"></script>
 </body>
 </html>
