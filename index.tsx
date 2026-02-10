@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import ReactDOM from 'react-dom/client';
 import { 
   Upload, Activity, Waves, Volume2, Bird, RefreshCw, Info, 
-  Keyboard, Square, Download, Circle, Loader2, Play, Music, Link as LinkIcon, Globe, CheckCircle, Search, X, FolderOpen, ChevronRight
+  Keyboard, Square, Download, Circle, Loader2, Play, Music, Link as LinkIcon, Globe, CheckCircle, Search, X, FolderOpen, ChevronRight,
+  Zap, Wind, Layers
 } from 'lucide-react';
 
 /** --- CONSTANTS & TYPES --- **/
@@ -180,16 +181,6 @@ const BioRepositoryBrowser = ({ isOpen, onClose, onLoadBird }: any) => {
               <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-cyan-400 group-hover:translate-x-1 transition-all" />
             </button>
           ))}
-          {filtered.length === 0 && (
-            <div className="py-20 text-center">
-              <p className="text-slate-500 text-sm italic">No matching signals in repository.</p>
-            </div>
-          )}
-        </div>
-        
-        <div className="p-4 bg-slate-950/50 border-t border-slate-800 text-[10px] text-slate-600 flex justify-between uppercase font-bold tracking-widest">
-          <span>Source: muvarna/bird-signals</span>
-          <span>{BIRD_FILES.length} Samples</span>
         </div>
       </div>
     </div>
@@ -281,20 +272,86 @@ const App = () => {
   const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
   const [remoteUrl, setRemoteUrl] = useState("");
   const [isBrowserOpen, setIsBrowserOpen] = useState(false);
+  const [fxState, setFxState] = useState({ delay: false, reverb: false });
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const masterBusRef = useRef<GainNode | null>(null);
   const scriptNodeRef = useRef<ScriptProcessorNode | null>(null);
   const recordedPCMRef = useRef<Float32Array[]>([]);
 
-  const getAudioCtx = () => {
+  // FX Nodes
+  const delayNodeRef = useRef<DelayNode | null>(null);
+  const delayFeedbackRef = useRef<GainNode | null>(null);
+  const delayWetRef = useRef<GainNode | null>(null);
+  const reverbNodeRef = useRef<ConvolverNode | null>(null);
+  const reverbWetRef = useRef<GainNode | null>(null);
+
+  const getAudioCtx = useCallback(() => {
     if (!audioCtxRef.current) {
       const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext;
-      audioCtxRef.current = new AudioContextClass();
-      masterBusRef.current = audioCtxRef.current.createGain();
-      masterBusRef.current.connect(audioCtxRef.current.destination);
+      const ctx = new AudioContextClass();
+      audioCtxRef.current = ctx;
+
+      const master = ctx.createGain();
+      master.connect(ctx.destination);
+      masterBusRef.current = master;
+
+      // Initialize Delay
+      const delay = ctx.createDelay(1.0);
+      delay.delayTime.value = 0.4;
+      const feedback = ctx.createGain();
+      feedback.gain.value = 0.4;
+      const dWet = ctx.createGain();
+      dWet.gain.value = 0;
+      
+      master.connect(delay);
+      delay.connect(feedback);
+      feedback.connect(delay);
+      delay.connect(dWet);
+      dWet.connect(ctx.destination);
+      
+      delayNodeRef.current = delay;
+      delayFeedbackRef.current = feedback;
+      delayWetRef.current = dWet;
+
+      // Initialize Reverb
+      const reverb = ctx.createConvolver();
+      const rWet = ctx.createGain();
+      rWet.gain.value = 0;
+      
+      // Create Algorithmic IR
+      const length = ctx.sampleRate * 2;
+      const buffer = ctx.createBuffer(2, length, ctx.sampleRate);
+      for (let i = 0; i < 2; i++) {
+        const data = buffer.getChannelData(i);
+        for (let j = 0; j < length; j++) {
+          data[j] = (Math.random() * 2 - 1) * Math.pow(1 - j / length, 2);
+        }
+      }
+      reverb.buffer = buffer;
+      
+      master.connect(reverb);
+      reverb.connect(rWet);
+      rWet.connect(ctx.destination);
+      
+      reverbNodeRef.current = reverb;
+      reverbWetRef.current = rWet;
     }
     return audioCtxRef.current;
+  }, []);
+
+  const toggleFx = (type: 'delay' | 'reverb') => {
+    const ctx = getAudioCtx();
+    if (ctx.state === 'suspended') ctx.resume();
+    
+    setFxState(prev => {
+      const next = { ...prev, [type]: !prev[type] };
+      const wetNode = type === 'delay' ? delayWetRef.current : reverbWetRef.current;
+      if (wetNode) {
+        wetNode.gain.setTargetAtTime(next[type] ? 0.5 : 0, ctx.currentTime, 0.03);
+      }
+      return next;
+    });
   };
 
   const processAudioData = async (arrayBuffer: ArrayBuffer) => {
@@ -332,7 +389,7 @@ const App = () => {
       const buf = await resp.arrayBuffer();
       processAudioData(buf);
     } catch (e) {
-      setStatus({ status: 'error', progress: 0, message: 'Fetch Error (Check your connection)' });
+      setStatus({ status: 'error', progress: 0, message: 'Fetch Error (Check connection)' });
     }
   };
 
@@ -342,15 +399,10 @@ const App = () => {
     loadFromUrl(url);
   }, []);
 
-  // AUTO-LOAD RANDOM SAMPLE ON MOUNT
   useEffect(() => {
     const randomIndex = Math.floor(Math.random() * BIRD_FILES.length);
     const randomBird = BIRD_FILES[randomIndex];
-    // Slightly delay to ensure initialization
-    const timer = setTimeout(() => {
-      setStatus(prev => ({ ...prev, status: 'loading', message: `Auto-importing random bio-signal: ${randomBird.replace('.mp3', '')}...` }));
-      loadBirdFromRepo(randomBird);
-    }, 500);
+    const timer = setTimeout(() => loadBirdFromRepo(randomBird), 1000);
     return () => clearTimeout(timer);
   }, [loadBirdFromRepo]);
 
@@ -368,7 +420,7 @@ const App = () => {
     source.playbackRate.value = Math.pow(2, (midi - nearest.midiNote) / 12);
     const gainNode = ctx.createGain();
     gainNode.gain.setValueAtTime(0.4, ctx.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.5);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.8);
     source.connect(gainNode);
     if (masterBusRef.current) gainNode.connect(masterBusRef.current);
     source.start();
@@ -377,7 +429,7 @@ const App = () => {
     source.onended = () => {
       setActiveMidiNotes(prev => { const n = new Set(prev); n.delete(midi); return n; });
     };
-  }, [samples]);
+  }, [samples, getAudioCtx]);
 
   const stopNote = useCallback((midi: number) => {
     setActiveMidiNotes(prev => { const n = new Set(prev); n.delete(midi); return n; });
@@ -433,85 +485,40 @@ const App = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
-    const resumeOnInteraction = () => {
-        const ctx = getAudioCtx();
-        if (ctx.state === 'suspended') ctx.resume();
-    };
-    window.addEventListener('mousedown', resumeOnInteraction);
     return () => {
         window.removeEventListener('keydown', handleKeyDown);
         window.removeEventListener('keyup', handleKeyUp);
-        window.removeEventListener('mousedown', resumeOnInteraction);
     };
   }, [playNote, stopNote]);
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-cyan-500/30 overflow-x-hidden">
-      <BioRepositoryBrowser 
-        isOpen={isBrowserOpen} 
-        onClose={() => setIsBrowserOpen(false)} 
-        onLoadBird={loadBirdFromRepo} 
-      />
+      <BioRepositoryBrowser isOpen={isBrowserOpen} onClose={() => setIsBrowserOpen(false)} onLoadBird={loadBirdFromRepo} />
 
       <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 md:px-6 h-20 flex items-center justify-between gap-2">
-          {/* Logo Section */}
           <div className="flex items-center space-x-2 md:space-x-3 shrink-0">
             <div className="p-1.5 md:p-2 bg-cyan-500 rounded-lg shadow-lg shadow-cyan-500/20"><Bird className="w-5 h-5 md:w-6 md:h-6 text-slate-950" /></div>
             <div className="hidden xs:block">
               <h1 className="text-lg md:text-xl font-black tracking-tighter uppercase italic text-white leading-none">ChirpSynth</h1>
-              <p className="text-[8px] md:text-[10px] mono text-cyan-400 font-bold tracking-widest leading-tight uppercase">Bioacoustic Sampler</p>
+              <p className="text-[8px] md:text-[10px] mono text-cyan-400 font-bold tracking-widest leading-tight uppercase">Bio-Sampler Pro</p>
             </div>
           </div>
 
-          {/* Center Actions (Visible on MD+) */}
-          <div className="hidden lg:flex items-center mx-6 flex-1 space-x-2">
-            <div className="relative flex-1 max-w-sm group">
-              <input 
-                type="text" 
-                placeholder="Paste GitHub URL..." 
-                className="w-full bg-slate-950 border border-slate-800 rounded-full px-4 py-1.5 text-xs mono focus:border-cyan-500 outline-none transition-all pr-10 hover:border-slate-600"
-                value={remoteUrl}
-                onChange={(e) => setRemoteUrl(e.target.value)}
-              />
-              <button 
-                onClick={() => loadFromUrl(remoteUrl)}
-                title="Fetch and Auto-Convert GitHub Links"
-                className="absolute right-1 top-1 bottom-1 px-3 rounded-full bg-slate-800 text-cyan-400 hover:bg-cyan-500 hover:text-white transition-all flex items-center justify-center"
-              >
-                <LinkIcon className="w-3 h-3" />
-              </button>
-            </div>
-          </div>
-
-          {/* Universal Header Actions */}
           <div className="flex items-center space-x-2 md:space-x-4 shrink-0">
-            {/* Bio Library Button - Responsive Visibility */}
-            <button 
-              onClick={() => setIsBrowserOpen(true)}
-              className="flex items-center space-x-2 bg-slate-900 border border-slate-800 hover:border-cyan-500/50 p-2 md:px-4 md:py-2 rounded-full text-xs font-black uppercase italic text-cyan-400 transition-all shadow-lg"
-              title="Open Bio-Library"
-            >
+            <button onClick={() => setIsBrowserOpen(true)} className="flex items-center space-x-2 bg-slate-900 border border-slate-800 hover:border-cyan-500/50 p-2 md:px-4 md:py-2 rounded-full text-xs font-black uppercase italic text-cyan-400 transition-all shadow-lg" title="Open Bio-Library">
               <FolderOpen className="w-4 h-4" />
               <span className="hidden sm:inline">Library</span>
             </button>
 
-            {/* Rec Controls */}
             <div className="flex items-center space-x-1 md:space-x-2 bg-slate-950/50 p-1 rounded-full border border-slate-800">
               {!isRecording ? (
-                <button 
-                  onClick={startRecording} 
-                  disabled={samples.length === 0 || isEncoding} 
-                  className="flex items-center space-x-1 md:space-x-2 px-2 md:px-3 py-1.5 rounded-full bg-slate-900 hover:bg-slate-800 text-red-500 font-bold text-[9px] md:text-[10px] transition-all disabled:opacity-30"
-                >
+                <button onClick={startRecording} disabled={samples.length === 0 || isEncoding} className="flex items-center space-x-1 md:space-x-2 px-2 md:px-3 py-1.5 rounded-full bg-slate-900 hover:bg-slate-800 text-red-500 font-bold text-[9px] md:text-[10px] transition-all disabled:opacity-30">
                   {isEncoding ? <Loader2 className="w-3 h-3 animate-spin" /> : <Circle className="w-3 h-3 fill-red-500" />}
                   <span className="hidden xs:inline">{isEncoding ? 'WAIT' : 'REC'}</span>
                 </button>
               ) : (
-                <button 
-                  onClick={stopRecording} 
-                  className="flex items-center space-x-1 md:space-x-2 px-2 md:px-3 py-1.5 rounded-full bg-red-500 text-white font-bold text-[9px] md:text-[10px] transition-all animate-pulse"
-                >
+                <button onClick={stopRecording} className="flex items-center space-x-1 md:space-x-2 px-2 md:px-3 py-1.5 rounded-full bg-red-500 text-white font-bold text-[9px] md:text-[10px] transition-all animate-pulse">
                   <Square className="w-3 h-3 fill-white" />
                   <span className="hidden xs:inline">STOP</span>
                 </button>
@@ -523,22 +530,12 @@ const App = () => {
                 </a>
               )}
             </div>
-
-            {/* Load Button */}
-            <label className="cursor-pointer">
-              <input type="file" accept="audio/*" onChange={handleFileUpload} className="hidden" />
-              <div className="bg-white hover:bg-slate-200 text-slate-950 p-2 md:px-4 md:py-2 rounded-full font-black text-[9px] md:text-[10px] uppercase flex items-center space-x-1.5 transition-all">
-                <Upload className="w-4 h-4" />
-                <span className="hidden sm:inline">LOAD</span>
-              </div>
-            </label>
           </div>
         </div>
       </header>
 
       <main className="flex-grow max-w-7xl mx-auto w-full p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8">
         <div className="lg:col-span-8 space-y-6 md:space-y-8">
-          {/* Progress Bar */}
           {(status.status === 'analyzing' || status.status === 'loading') && (
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 md:p-6 shadow-2xl">
               <div className="flex justify-between mb-4">
@@ -552,7 +549,6 @@ const App = () => {
             </div>
           )}
           
-          {/* Visualizer Display */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 relative overflow-hidden h-40 md:h-64 flex flex-col justify-end">
              <div className="absolute top-4 left-4 z-10 flex items-center space-x-2 bg-slate-950/80 px-3 py-1 rounded-full border border-slate-700">
               <Waves className="w-3 h-3 text-cyan-400" />
@@ -560,8 +556,8 @@ const App = () => {
             </div>
             <div className="h-full flex items-end justify-center space-x-1 pt-8">
               {[...Array(window.innerWidth < 768 ? 30 : 60)].map((_, i) => (
-                <div key={i} className={`w-1 bg-cyan-500/20 rounded-t-full transition-all duration-300 ${isRecording ? 'animate-pulse' : ''}`}
-                  style={{ height: `${20 + (isRecording ? Math.random() * 80 : 20)}%`, opacity: 0.1 + (i / 60) * 0.5 }}
+                <div key={i} className={`w-1 bg-cyan-500/20 rounded-t-full transition-all duration-300 ${activeMidiNotes.size > 0 ? 'animate-pulse' : ''}`}
+                  style={{ height: `${20 + (activeMidiNotes.size > 0 ? Math.random() * 80 : 20)}%`, opacity: 0.1 + (i / 60) * 0.5 }}
                 />
               ))}
               {status.status === 'idle' && (
@@ -572,27 +568,43 @@ const App = () => {
             </div>
           </div>
 
-          {/* Keyboard Section */}
           <section className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <h2 className="text-base md:text-lg font-black uppercase italic flex items-center space-x-2 text-white">
                 <Volume2 className="w-5 h-5 text-cyan-400" />
                 <span>Playable Sampler</span>
               </h2>
-              <div className="flex items-center space-x-2">
-                <div className="px-2 py-1 rounded-md bg-slate-800 border border-slate-700 text-[8px] md:text-[10px] mono text-slate-400 flex items-center uppercase">
-                  <Keyboard className="w-3 h-3 mr-1.5 md:mr-2 text-cyan-400" />
-                  <span className="hidden xs:inline">Tracker Active</span>
-                </div>
-              </div>
             </div>
             <PianoKeyboard onNoteOn={playNote} onNoteOff={stopNote} mappedNotes={new Set(samples.map(s => s.midiNote))} activeNotes={activeMidiNotes} />
           </section>
         </div>
 
-        {/* Sidebar */}
         <div className="lg:col-span-4 space-y-6">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 md:p-6 flex flex-col h-full shadow-2xl overflow-hidden min-h-[400px] lg:min-h-[500px]">
+          {/* FX RACK */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 md:p-6 shadow-2xl space-y-4">
+            <h2 className="font-black uppercase italic text-xs md:text-sm flex items-center space-x-2 text-white">
+              <Zap className="w-4 h-4 text-cyan-400" />
+              <span>Bio-FX Unit</span>
+            </h2>
+            <div className="grid grid-cols-2 gap-3">
+              <button 
+                onClick={() => toggleFx('delay')}
+                className={`p-4 rounded-xl border flex flex-col items-center justify-center space-y-2 transition-all group ${fxState.delay ? 'bg-cyan-500/10 border-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.3)]' : 'bg-slate-800/50 border-slate-800 hover:border-slate-700'}`}
+              >
+                <Wind className={`w-6 h-6 transition-all ${fxState.delay ? 'text-cyan-400 animate-pulse' : 'text-slate-500'}`} />
+                <span className={`text-[10px] font-black uppercase italic tracking-widest ${fxState.delay ? 'text-cyan-400' : 'text-slate-500'}`}>Echo</span>
+              </button>
+              <button 
+                onClick={() => toggleFx('reverb')}
+                className={`p-4 rounded-xl border flex flex-col items-center justify-center space-y-2 transition-all group ${fxState.reverb ? 'bg-magenta-500/10 border-pink-500 shadow-[0_0_15px_rgba(236,72,153,0.3)]' : 'bg-slate-800/50 border-slate-800 hover:border-slate-700'}`}
+              >
+                <Layers className={`w-6 h-6 transition-all ${fxState.reverb ? 'text-pink-400 animate-pulse' : 'text-slate-500'}`} />
+                <span className={`text-[10px] font-black uppercase italic tracking-widest ${fxState.reverb ? 'text-pink-400' : 'text-slate-500'}`}>Space</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 md:p-6 flex flex-col shadow-2xl overflow-hidden h-[400px]">
             <div className="flex items-center justify-between mb-6">
               <h2 className="font-black uppercase italic text-xs md:text-sm flex items-center space-x-2 text-white">
                 <RefreshCw className={`w-4 h-4 text-cyan-400 ${status.status === 'analyzing' ? 'animate-spin' : ''}`} />
@@ -606,39 +618,13 @@ const App = () => {
                }} />
             </div>
           </div>
-
-          <div className="bg-gradient-to-br from-cyan-950/40 to-slate-900 border border-cyan-800/30 rounded-2xl p-5 md:p-6 shadow-xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-500/5 blur-3xl rounded-full -mr-12 -mt-12" />
-            <h3 className="font-bold text-[9px] md:text-[10px] text-cyan-400 uppercase mb-3 flex items-center tracking-widest">
-              <Globe className="w-3 h-3 mr-2" />
-              QUICK START INFO
-            </h3>
-            <div className="space-y-3 text-[11px] md:text-xs text-slate-300 leading-relaxed italic relative z-10">
-              <p className="flex items-start">
-                <CheckCircle className="w-3.5 h-3.5 text-cyan-500 mr-2 shrink-0 mt-0.5" />
-                <span>Tap <b>Library</b> to choose professional bird recordings.</span>
-              </p>
-              <p className="flex items-start">
-                <CheckCircle className="w-3.5 h-3.5 text-cyan-500 mr-2 shrink-0 mt-0.5" />
-                <span>Extracted notes are mapped across the chromatic piano keys.</span>
-              </p>
-              <p className="flex items-start opacity-70">
-                <Info className="w-3.5 h-3.5 text-slate-500 mr-2 shrink-0 mt-0.5" />
-                <span>On desktop, use your <b>physical keyboard</b> to perform live.</span>
-              </p>
-            </div>
-          </div>
         </div>
       </main>
 
       <footer className="border-t border-slate-900 bg-slate-950 p-4 md:p-6 mt-auto">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center opacity-40">
           <div className="text-[8px] md:text-[10px] mono mb-2 sm:mb-0 uppercase tracking-widest text-white font-bold text-center sm:text-left">
-            CHIRPSYNTH BIO-SYSTEMS // DSP CORE V1.5
-          </div>
-          <div className="flex space-x-6 text-[8px] md:text-[10px] mono uppercase font-bold tracking-[0.2em]">
-            <span>Bio-Library Active</span>
-            <span className="hidden xs:inline">{BIRD_FILES.length}_SIGNALS_LOADED</span>
+            CHIRPSYNTH // BIO-SYSTEMS PRO // DSP CORE V1.8
           </div>
         </div>
       </footer>
