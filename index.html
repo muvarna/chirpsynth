@@ -55,21 +55,48 @@
             0%, 100% { opacity: 1; }
             50% { opacity: 0.3; }
         }
+        #error-display {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            background: rgba(220, 38, 38, 0.9);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            z-index: 9999;
+            display: none;
+            border: 1px solid #ef4444;
+        }
     </style>
 <script type="importmap">
 {
   "imports": {
-    "lucide-react": "https://esm.sh/lucide-react@0.460.0",
-    "react-dom/": "https://esm.sh/react-dom@19.0.0/",
-    "react/": "https://esm.sh/react@19.0.0/",
-    "react": "https://esm.sh/react@19.0.0"
+    "react": "https://esm.sh/react@19.0.0",
+    "react-dom": "https://esm.sh/react-dom@19.0.0",
+    "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
+    "lucide-react": "https://esm.sh/lucide-react@0.460.0?external=react",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/"
   }
 }
 </script>
 </head>
 <body>
     <div id="root"></div>
+    <div id="error-display"></div>
     <script>
+      // Global Error Logger for debugging "Initialising..." hang
+      const errDisp = document.getElementById('error-display');
+      function showError(msg) {
+        errDisp.style.display = 'block';
+        errDisp.innerText = 'SYSTEM_ERROR: ' + msg;
+      }
+      window.onerror = (msg, url, line) => showError(`${msg} at ${url}:${line}`);
+      window.onunhandledrejection = (event) => showError(`Promise Rejection: ${event.reason}`);
+
       // Register Service Worker for PWA functionality
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
@@ -78,7 +105,6 @@
               const installingWorker = reg.installing;
               installingWorker.onstatechange = () => {
                 if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                  // New version available, reload
                   window.location.reload();
                 }
               };
