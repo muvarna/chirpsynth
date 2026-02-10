@@ -1,6 +1,6 @@
 # 🦜 Bird Song Sampler Synth
 An interactive web-based synthesizer that transforms real bird vocalizations into playable musical instruments.
-![Synth Screenshot](screen.png)
+![Synth Screenshot](screen.PNG)
 
 ## 🚀 [Play the Synth Live Here!](https://muvarna.github.io/chirpsynth/)
 
