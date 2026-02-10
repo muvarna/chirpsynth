@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import ReactDOM from 'react-dom/client';
 import { 
@@ -9,19 +8,18 @@ import {
 /** --- CONSTANTS & TYPES --- **/
 const MIDI_NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
-// Tracker-style 2-octave mapping
+// Two-octave mapping
+// Lower octave: Z-row (starting at C3 = 48)
+// Upper octave: Q-row (starting at C4 = 60)
 const COMPUTER_KEY_MAP: Record<string, number> = {
-  // Octave 3 (Bottom Row)
+  // Lower Octave (C3 - C4)
   'z': 48, 's': 49, 'x': 50, 'd': 51, 'c': 52, 'v': 53, 'g': 54, 'b': 55, 'h': 56, 'n': 57, 'j': 58, 'm': 59, ',': 60,
-  // Octave 4 (Top Row)
+  // Upper Octave (C4 - C5)
   'q': 60, '2': 61, 'w': 62, '3': 63, 'e': 64, 'r': 65, '5': 66, 't': 67, '6': 68, 'y': 69, '7': 70, 'u': 71, 'i': 72
 };
 
-// Labels for the visual piano keys
 const KEY_LABELS: Record<number, string> = {
-  // Octave 3
   48: 'Z', 49: 'S', 50: 'X', 51: 'D', 52: 'C', 53: 'V', 54: 'G', 55: 'B', 56: 'H', 57: 'N', 58: 'J', 59: 'M',
-  // Octave 4
   60: 'Q', 61: '2', 62: 'W', 63: '3', 64: 'E', 65: 'R', 66: '5', 67: 'T', 68: '6', 69: 'Y', 70: '7', 71: 'U', 72: 'I'
 };
 
@@ -105,7 +103,7 @@ async function extractStableSamples(audioBuffer: AudioBuffer, onProgress: (p: nu
 const PianoKeyboard = ({ onNoteOn, onNoteOff, mappedNotes, activeNotes }: any) => {
   const keys = useMemo(() => {
     const list = [];
-    // Display keys from MIDI 48 (C3) to MIDI 72 (C5) for full 2-octave coverage
+    // Full 2-octave range visual display
     for (let i = 48; i <= 72; i++) list.push({ midi: i, isBlack: [1, 3, 6, 8, 10].includes(i % 12) });
     return list;
   }, []);
@@ -171,7 +169,7 @@ const SampleList = ({ samples, onPlaySample }: any) => {
 const App = () => {
   const [samples, setSamples] = useState<any[]>([]);
   const [status, setStatus] = useState({ status: 'idle', progress: 0, message: 'Bio-engine ready' });
-  const [activeMidiNotes, setActiveMidiNotes] = useState(new Set());
+  const [activeMidiNotes, setActiveMidiNotes] = useState(new Set<number>());
   const [isRecording, setIsRecording] = useState(false);
   const [isEncoding, setIsEncoding] = useState(false);
   const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
@@ -183,7 +181,7 @@ const App = () => {
 
   const getAudioCtx = () => {
     if (!audioCtxRef.current) {
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext;
       audioCtxRef.current = new AudioContextClass();
       masterBusRef.current = audioCtxRef.current.createGain();
       masterBusRef.current.connect(audioCtxRef.current.destination);
@@ -195,6 +193,8 @@ const App = () => {
     const file = event.target.files?.[0];
     if (!file) return;
     const ctx = getAudioCtx();
+    if (ctx.state === 'suspended') ctx.resume();
+    
     setStatus({ status: 'loading', progress: 0.1, message: 'Decoding audio...' });
     try {
       const decodedBuffer = await ctx.decodeAudioData(await file.arrayBuffer());
@@ -202,7 +202,10 @@ const App = () => {
       const extracted = await extractStableSamples(decodedBuffer, p => setStatus(prev => ({ ...prev, progress: 0.2 + (p * 0.8) })));
       setSamples(extracted);
       setStatus({ status: 'completed', progress: 1.0, message: `Captured ${extracted.length} bio-samples` });
-    } catch (err) { setStatus({ status: 'error', progress: 0, message: 'DSP Failure' }); }
+    } catch (err) { 
+      console.error(err);
+      setStatus({ status: 'error', progress: 0, message: 'DSP Failure' }); 
+    }
   };
 
   const playNote = useCallback((midi: number) => {
@@ -210,7 +213,6 @@ const App = () => {
     const ctx = getAudioCtx();
     if (ctx.state === 'suspended') ctx.resume();
     
-    // Find nearest pitch in detected samples for repitching
     let nearest = samples[0];
     let minDiff = Math.abs(samples[0].midiNote - midi);
     samples.forEach(s => { const d = Math.abs(s.midiNote - midi); if (d < minDiff) { minDiff = d; nearest = s; } });
@@ -231,6 +233,8 @@ const App = () => {
 
   const startRecording = () => {
     const ctx = getAudioCtx();
+    if (ctx.state === 'suspended') ctx.resume();
+    
     const node = ctx.createScriptProcessor(4096, 1, 1);
     recordedPCMRef.current = [];
     node.onaudioprocess = e => recordedPCMRef.current.push(new Float32Array(e.inputBuffer.getChannelData(0)));
@@ -263,16 +267,31 @@ const App = () => {
     } catch (e) { console.error(e); } finally { setIsEncoding(false); }
   };
 
-  // Keyboard Event Management
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.repeat) return;
-      const midi = COMPUTER_KEY_MAP[e.key.toLowerCase()];
-      if (midi) playNote(midi);
+      // Check if user is typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      const key = e.key.toLowerCase();
+      const midi = COMPUTER_KEY_MAP[key];
+      if (midi) {
+        e.preventDefault(); // Prevent scrolling/browsing shortcuts
+        if (!e.repeat) playNote(midi);
+      }
     };
     
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    
+    const resumeOnInteraction = () => {
+        const ctx = getAudioCtx();
+        if (ctx.state === 'suspended') ctx.resume();
+    };
+    window.addEventListener('mousedown', resumeOnInteraction);
+    
+    return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+        window.removeEventListener('mousedown', resumeOnInteraction);
+    };
   }, [playNote]);
 
   return (
@@ -390,19 +409,11 @@ const App = () => {
           </div>
         </div>
       </main>
-      <footer className="border-t border-slate-900 bg-slate-950 p-6 mt-auto">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center opacity-40">
-          <div className="text-[10px] mono mb-4 md:mb-0 uppercase tracking-widest text-white font-bold">
-            CHIRPSYNTH BIO-SYSTEMS // KEYBOARD_PLAY_ACTIVE
-          </div>
-          <div className="flex space-x-8 text-[10px] mono uppercase font-bold tracking-[0.2em]">
-            <span>Documentation</span>
-            <span>V1.2.0_Build</span>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 };
 
-ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
+const rootEl = document.getElementById('root');
+if (rootEl) {
+  ReactDOM.createRoot(rootEl).render(<App />);
+}
