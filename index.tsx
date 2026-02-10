@@ -8,15 +8,21 @@ import {
 
 /** --- CONSTANTS & TYPES --- **/
 const MIDI_NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
+// Tracker-style 2-octave mapping
 const COMPUTER_KEY_MAP: Record<string, number> = {
-  'a': 60, 'w': 61, 's': 62, 'e': 63, 'd': 64, 'f': 65, 't': 66, 'g': 67, 
-  'y': 68, 'h': 69, 'u': 70, 'j': 71, 'k': 72, 'o': 73, 'l': 74, 'p': 75, 
-  ';': 76, "'": 77
+  // Octave 3 (Bottom Row)
+  'z': 48, 's': 49, 'x': 50, 'd': 51, 'c': 52, 'v': 53, 'g': 54, 'b': 55, 'h': 56, 'n': 57, 'j': 58, 'm': 59, ',': 60,
+  // Octave 4 (Top Row)
+  'q': 60, '2': 61, 'w': 62, '3': 63, 'e': 64, 'r': 65, '5': 66, 't': 67, '6': 68, 'y': 69, '7': 70, 'u': 71, 'i': 72
 };
+
+// Labels for the visual piano keys
 const KEY_LABELS: Record<number, string> = {
-  60: 'A', 61: 'W', 62: 'S', 63: 'E', 64: 'D', 65: 'F', 66: 'T', 67: 'G', 
-  68: 'Y', 69: 'H', 70: 'U', 71: 'J', 72: 'K', 73: 'O', 74: 'L', 75: 'P', 
-  76: ';', 77: "'"
+  // Octave 3
+  48: 'Z', 49: 'S', 50: 'X', 51: 'D', 52: 'C', 53: 'V', 54: 'G', 55: 'B', 56: 'H', 57: 'N', 58: 'J', 59: 'M',
+  // Octave 4
+  60: 'Q', 61: '2', 62: 'W', 63: '3', 64: 'E', 65: 'R', 66: '5', 67: 'T', 68: '6', 69: 'Y', 70: '7', 71: 'U', 72: 'I'
 };
 
 /** --- DSP UTILS --- **/
@@ -99,12 +105,13 @@ async function extractStableSamples(audioBuffer: AudioBuffer, onProgress: (p: nu
 const PianoKeyboard = ({ onNoteOn, onNoteOff, mappedNotes, activeNotes }: any) => {
   const keys = useMemo(() => {
     const list = [];
-    for (let i = 48; i <= 84; i++) list.push({ midi: i, isBlack: [1, 3, 6, 8, 10].includes(i % 12) });
+    // Display keys from MIDI 48 (C3) to MIDI 72 (C5) for full 2-octave coverage
+    for (let i = 48; i <= 72; i++) list.push({ midi: i, isBlack: [1, 3, 6, 8, 10].includes(i % 12) });
     return list;
   }, []);
 
   return (
-    <div className="flex w-full overflow-x-auto pb-4 justify-center bg-slate-900 p-8 rounded-xl border border-slate-800 shadow-2xl select-none">
+    <div className="flex w-full overflow-x-auto pb-4 justify-center bg-slate-900 p-8 rounded-xl border border-slate-800 shadow-2xl select-none custom-scrollbar">
       <div className="flex relative h-64 min-w-max">
         {keys.map((key) => {
           const isMapped = mappedNotes.has(key.midi);
@@ -112,7 +119,7 @@ const PianoKeyboard = ({ onNoteOn, onNoteOff, mappedNotes, activeNotes }: any) =
           const computerKey = KEY_LABELS[key.midi];
           if (key.isBlack) {
             return (
-              <div key={key.midi} onMouseDown={() => onNoteOn(key.midi)} onMouseUp={() => onNoteOff(key.midi)} className={`absolute w-8 h-40 z-10 -ml-4 rounded-b-md cursor-pointer transition-all flex flex-col justify-end items-center pb-2 ${isActive ? 'bg-cyan-400' : 'bg-slate-950'} ${isMapped ? 'border-b-4 border-emerald-400' : 'border-b-2 border-slate-700'} hover:bg-slate-800`} style={{ left: `${(keys.filter(k => !k.isBlack && k.midi < key.midi).length) * 3.5}rem` }}>
+              <div key={key.midi} onMouseDown={() => onNoteOn(key.midi)} onMouseUp={() => onNoteOff(key.midi)} className={`absolute w-8 h-40 z-10 -ml-4 rounded-b-md cursor-pointer transition-all flex flex-col justify-end items-center pb-2 ${isActive ? 'bg-cyan-400' : 'bg-slate-950'} ${isMapped ? 'border-b-4 border-emerald-400' : 'border-b-2 border-slate-700'} hover:bg-slate-800 shadow-lg`} style={{ left: `${(keys.filter(k => !k.isBlack && k.midi < key.midi).length) * 3.5}rem` }}>
                 {computerKey && <span className={`text-[10px] font-black mono ${isActive ? 'text-slate-950' : 'text-slate-600'}`}>[{computerKey}]</span>}
               </div>
             );
@@ -139,7 +146,7 @@ const SampleList = ({ samples, onPlaySample }: any) => {
     </div>
   );
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4">
       {samples.map((sample: any) => (
         <div key={sample.id} className="group bg-slate-900 border border-slate-800 p-4 rounded-xl hover:border-cyan-500/50 transition-all flex items-center justify-between shadow-lg">
           <div className="flex items-center space-x-4">
@@ -202,6 +209,8 @@ const App = () => {
     if (samples.length === 0) return;
     const ctx = getAudioCtx();
     if (ctx.state === 'suspended') ctx.resume();
+    
+    // Find nearest pitch in detected samples for repitching
     let nearest = samples[0];
     let minDiff = Math.abs(samples[0].midiNote - midi);
     samples.forEach(s => { const d = Math.abs(s.midiNote - midi); if (d < minDiff) { minDiff = d; nearest = s; } });
@@ -215,6 +224,7 @@ const App = () => {
     source.connect(gainNode);
     if (masterBusRef.current) gainNode.connect(masterBusRef.current);
     source.start();
+    
     setActiveMidiNotes(prev => new Set(prev).add(midi));
     source.onended = () => setActiveMidiNotes(prev => { const n = new Set(prev); n.delete(midi); return n; });
   }, [samples]);
@@ -253,10 +263,16 @@ const App = () => {
     } catch (e) { console.error(e); } finally { setIsEncoding(false); }
   };
 
+  // Keyboard Event Management
   useEffect(() => {
-    const down = (e: KeyboardEvent) => { if (e.repeat) return; const m = COMPUTER_KEY_MAP[e.key.toLowerCase()]; if (m) playNote(m); };
-    window.addEventListener('keydown', down);
-    return () => window.removeEventListener('keydown', down);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      const midi = COMPUTER_KEY_MAP[e.key.toLowerCase()];
+      if (midi) playNote(midi);
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [playNote]);
 
   return (
@@ -314,7 +330,12 @@ const App = () => {
               <p className="mt-4 text-sm text-slate-400 italic">“{status.message}”</p>
             </div>
           )}
+          
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 relative overflow-hidden">
+             <div className="absolute top-4 left-4 z-10 flex items-center space-x-2 bg-slate-950/80 px-3 py-1 rounded-full border border-slate-700">
+              <Waves className="w-3 h-3 text-cyan-400" />
+              <span className="text-[10px] font-bold mono uppercase">Bio_Stream_Active</span>
+            </div>
             <div className="h-48 flex items-end justify-center space-x-1">
               {[...Array(60)].map((_, i) => (
                 <div key={i} className={`w-1 bg-cyan-500/20 rounded-t-full transition-all duration-300 ${isRecording ? 'animate-pulse' : ''}`}
@@ -324,15 +345,31 @@ const App = () => {
               {status.status === 'idle' && <div className="absolute inset-0 flex items-center justify-center"><p className="text-slate-500 font-bold uppercase tracking-[0.2em] text-xs">Waiting for Input Signal...</p></div>}
             </div>
           </div>
+
           <section className="space-y-4">
-            <h2 className="text-lg font-black uppercase italic flex items-center space-x-2 text-white"><Volume2 className="w-5 h-5 text-cyan-400" /><span>Playable Sampler</span></h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-black uppercase italic flex items-center space-x-2 text-white">
+                <Volume2 className="w-5 h-5 text-cyan-400" />
+                <span>Playable Sampler</span>
+              </h2>
+              <div className="flex items-center space-x-4">
+                <div className="px-3 py-1 rounded-md bg-slate-800 border border-slate-700 text-[10px] mono text-slate-400 flex items-center uppercase">
+                  <Keyboard className="w-3 h-3 mr-2 text-cyan-400" />
+                  Tracker Layout: QWERTY + ZXCVB
+                </div>
+              </div>
+            </div>
             <PianoKeyboard onNoteOn={playNote} onNoteOff={() => {}} mappedNotes={new Set(samples.map(s => s.midiNote))} activeNotes={activeMidiNotes} />
           </section>
         </div>
+
         <div className="lg:col-span-4 space-y-6">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col h-full shadow-2xl overflow-hidden">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="font-black uppercase italic text-sm flex items-center space-x-2 text-white"><RefreshCw className={`w-4 h-4 text-cyan-400 ${status.status === 'analyzing' ? 'animate-spin' : ''}`} /><span>Extracted Notes</span></h2>
+              <h2 className="font-black uppercase italic text-sm flex items-center space-x-2 text-white">
+                <RefreshCw className={`w-4 h-4 text-cyan-400 ${status.status === 'analyzing' ? 'animate-spin' : ''}`} />
+                <span>Extracted Notes</span>
+              </h2>
               <span className="bg-slate-950 px-2 py-0.5 rounded text-[10px] mono text-cyan-500 border border-cyan-900 font-bold">{samples.length}</span>
             </div>
             <div className="flex-grow overflow-y-auto custom-scrollbar">
@@ -341,8 +378,29 @@ const App = () => {
                }} />
             </div>
           </div>
+          <div className="bg-gradient-to-br from-cyan-950/40 to-slate-900 border border-cyan-800/30 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-500/5 blur-3xl rounded-full -mr-12 -mt-12" />
+            <h3 className="font-bold text-[10px] text-cyan-400 uppercase mb-3 flex items-center tracking-widest">
+              <Info className="w-3 h-3 mr-2" />
+              SYSTEM INFO
+            </h3>
+            <p className="text-xs text-slate-300 leading-relaxed italic relative z-10">
+              "2-Octave Tracker layout enabled. Bottom row (Z to M) covers Octave 3. Top row (Q to I) covers Octave 4. Black keys are mapped to number/middle row keys."
+            </p>
+          </div>
         </div>
       </main>
+      <footer className="border-t border-slate-900 bg-slate-950 p-6 mt-auto">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center opacity-40">
+          <div className="text-[10px] mono mb-4 md:mb-0 uppercase tracking-widest text-white font-bold">
+            CHIRPSYNTH BIO-SYSTEMS // KEYBOARD_PLAY_ACTIVE
+          </div>
+          <div className="flex space-x-8 text-[10px] mono uppercase font-bold tracking-[0.2em]">
+            <span>Documentation</span>
+            <span>V1.2.0_Build</span>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 };
