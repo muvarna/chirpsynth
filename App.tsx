@@ -1,10 +1,10 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Upload, Activity, Waves, Volume2, Bird, RefreshCw, AlertCircle, Info, Keyboard, Mic, Square, Download, Circle, Loader2 } from 'lucide-react';
-import { AudioSample, AnalysisProgress } from './types';
-import { extractStableSamples, midiToNoteName } from './services/dspService';
-import PianoKeyboard from './components/PianoKeyboard';
-import SampleList from './components/SampleList';
+import { AudioSample, AnalysisProgress } from './types.ts';
+import { extractStableSamples, midiToNoteName } from './services/dspService.ts';
+import PianoKeyboard from './components/PianoKeyboard.tsx';
+import SampleList from './components/SampleList.tsx';
 
 // Mapping computer keys to MIDI offsets (relative to C4 = 60)
 const COMPUTER_KEY_MAP: Record<string, number> = {
@@ -81,17 +81,14 @@ const App: React.FC = () => {
     if (!masterBusRef.current) return;
 
     // Use ScriptProcessor to capture PCM chunks
-    // 4096 buffer size, 1 input channel (synth is mono for now), 1 output
     const scriptNode = ctx.createScriptProcessor(4096, 1, 1);
     recordedPCMRef.current = [];
     
     scriptNode.onaudioprocess = (e) => {
       const inputData = e.inputBuffer.getChannelData(0);
-      // Copy the buffer so it's not reused by the engine
       recordedPCMRef.current.push(new Float32Array(inputData));
     };
 
-    // Route: MasterBus -> ScriptNode -> Destination (to hear it while recording)
     masterBusRef.current.connect(scriptNode);
     scriptNode.connect(ctx.destination);
 
@@ -106,13 +103,11 @@ const App: React.FC = () => {
     setIsRecording(false);
     setIsEncoding(true);
 
-    // Disconnect
     scriptNodeRef.current.onaudioprocess = null;
     masterBusRef.current.disconnect(scriptNodeRef.current);
     scriptNodeRef.current.disconnect();
     scriptNodeRef.current = null;
 
-    // Perform MP3 Encoding using lamejs
     try {
       const mp3Url = await encodeToMp3(recordedPCMRef.current, getAudioCtx().sampleRate);
       setRecordedUrl(mp3Url);
@@ -124,7 +119,6 @@ const App: React.FC = () => {
   };
 
   const encodeToMp3 = async (pcmChunks: Float32Array[], sampleRate: number): Promise<string> => {
-    // Concatenate chunks
     const totalLength = pcmChunks.reduce((acc, chunk) => acc + chunk.length, 0);
     const pcm = new Float32Array(totalLength);
     let offset = 0;
@@ -133,19 +127,16 @@ const App: React.FC = () => {
       offset += chunk.length;
     }
 
-    // Convert Float32 to Int16
     const int16Samples = new Int16Array(pcm.length);
     for (let i = 0; i < pcm.length; i++) {
-      // Clamp values to prevent distortion
       const s = Math.max(-1, Math.min(1, pcm[i]));
       int16Samples[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
     }
 
-    // @ts-ignore - lamejs is loaded via script tag
     const mp3encoder = new (window as any).lamejs.Mp3Encoder(1, sampleRate, 128);
     const mp3Data: Uint8Array[] = [];
     
-    const sampleBlockSize = 1152; // standard LAME block size
+    const sampleBlockSize = 1152;
     for (let i = 0; i < int16Samples.length; i += sampleBlockSize) {
       const sampleChunk = int16Samples.subarray(i, i + sampleBlockSize);
       const mp3buf = mp3encoder.encodeBuffer(sampleChunk);
@@ -228,7 +219,6 @@ const App: React.FC = () => {
     }
     
     source.start();
-    activeSources.current.set(midi, source);
     setActiveMidiNotes(prev => new Set(prev).add(midi));
 
     source.onended = () => {
@@ -283,7 +273,6 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-cyan-500/30">
-      {/* Header */}
       <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center space-x-3">
@@ -295,9 +284,7 @@ const App: React.FC = () => {
               <p className="text-[10px] mono text-cyan-400 font-bold tracking-widest leading-tight uppercase">Bioacoustic Sampler V1.2</p>
             </div>
           </div>
-          
           <div className="flex items-center space-x-6">
-            {/* Recorder Interface */}
             <div className="flex items-center space-x-2 bg-slate-950/50 p-1.5 rounded-full border border-slate-800">
               {!isRecording ? (
                 <button 
@@ -317,7 +304,6 @@ const App: React.FC = () => {
                   <span>STOP & RENDER</span>
                 </button>
               )}
-
               {recordedUrl && (
                 <a 
                   href={recordedUrl} 
@@ -329,7 +315,6 @@ const App: React.FC = () => {
                 </a>
               )}
             </div>
-
             <label className="cursor-pointer group">
               <input type="file" accept="audio/mp3,audio/wav,audio/mpeg" onChange={handleFileUpload} className="hidden" />
               <div className="bg-white hover:bg-slate-200 text-slate-950 px-6 py-2 rounded-full font-black text-xs uppercase flex items-center space-x-2 transition-all shadow-lg shadow-white/5 group-active:scale-95">
@@ -340,14 +325,8 @@ const App: React.FC = () => {
           </div>
         </div>
       </header>
-
-      {/* Main Grid */}
       <main className="flex-grow max-w-7xl mx-auto w-full p-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
-        {/* Left Col: Analysis & Viz */}
         <div className="lg:col-span-8 space-y-8">
-          
-          {/* Progress Bar */}
           {(status.status === 'analyzing' || status.status === 'loading') && (
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
               <div className="flex justify-between mb-4">
@@ -366,14 +345,11 @@ const App: React.FC = () => {
               <p className="mt-4 text-sm text-slate-400 italic">“{status.message}”</p>
             </div>
           )}
-
-          {/* Visualization Placeholder / Waveform */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 relative overflow-hidden group">
             <div className="absolute top-4 left-4 z-10 flex items-center space-x-2 bg-slate-950/80 px-3 py-1 rounded-full border border-slate-700">
               <Waves className="w-3 h-3 text-cyan-400" />
               <span className="text-[10px] font-bold mono uppercase">PCM_Stream_Capture</span>
             </div>
-            
             <div className="h-48 flex items-end justify-center space-x-1">
               {[...Array(60)].map((_, i) => (
                 <div 
@@ -393,8 +369,6 @@ const App: React.FC = () => {
               )}
             </div>
           </div>
-
-          {/* The Keyboard */}
           <section className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-black uppercase italic flex items-center space-x-2 text-white">
@@ -418,10 +392,7 @@ const App: React.FC = () => {
               activeNotes={activeMidiNotes}
             />
           </section>
-
         </div>
-
-        {/* Right Col: Sample Repository */}
         <div className="lg:col-span-4 space-y-6">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col h-full shadow-2xl">
             <div className="flex items-center justify-between mb-6">
@@ -433,12 +404,10 @@ const App: React.FC = () => {
                 BUFFER: {samples.length}
               </span>
             </div>
-            
             <div className="flex-grow overflow-y-auto max-h-[600px] pr-2 custom-scrollbar">
               <SampleList samples={samples} onPlaySample={playSampleRaw} />
             </div>
           </div>
-
           <div className="bg-gradient-to-br from-cyan-950/40 to-slate-900 border border-cyan-800/30 rounded-2xl p-6 shadow-xl relative overflow-hidden">
             <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-500/5 blur-3xl rounded-full -mr-12 -mt-12" />
             <h3 className="font-bold text-[10px] text-cyan-400 uppercase mb-3 flex items-center tracking-widest">
@@ -446,14 +415,11 @@ const App: React.FC = () => {
               MP3_EXPORT_ENGINE
             </h3>
             <p className="text-xs text-slate-300 leading-relaxed italic relative z-10">
-              "System uses a client-side LAME encoder to process the captured Master Bus PCM stream. The bit depth is normalized to 16-bit Int for high-fidelity MP3 compression at 128kbps, ensuring compatibility with standard audio workstations."
+              "System uses a client-side LAME encoder to process the captured Master Bus PCM stream. The bit depth is normalized to 16-bit Int for high-fidelity MP3 compression at 128kbps."
             </p>
           </div>
         </div>
-
       </main>
-
-      {/* Footer */}
       <footer className="border-t border-slate-900 bg-slate-950 p-6 mt-auto">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center opacity-40">
           <div className="text-[10px] mono mb-4 md:mb-0 uppercase tracking-widest text-white font-bold">
