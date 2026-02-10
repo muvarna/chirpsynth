@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'chirpsynth-v1.3';
+const CACHE_NAME = 'chirpsynth-v1.4';
 const ASSETS = [
   './',
   './index.html',
@@ -16,7 +16,7 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
-  self.skipWaiting(); // Force the new service worker to take over immediately
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(ASSETS);
