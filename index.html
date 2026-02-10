@@ -69,6 +69,8 @@
             z-index: 9999;
             display: none;
             border: 1px solid #ef4444;
+            white-space: pre-wrap;
+            word-break: break-all;
         }
     </style>
 <script type="importmap">
@@ -78,8 +80,8 @@
     "react-dom": "https://esm.sh/react-dom@19.0.0",
     "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
     "lucide-react": "https://esm.sh/lucide-react@0.460.0?external=react",
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/"
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/"
   }
 }
 </script>
@@ -88,34 +90,43 @@
     <div id="root"></div>
     <div id="error-display"></div>
     <script>
-      // Global Error Logger for debugging "Initialising..." hang
+      console.log("DOM_READY: Initializing boot sequence...");
+      
       const errDisp = document.getElementById('error-display');
       function showError(msg) {
+        console.error("BOOT_ERROR:", msg);
         errDisp.style.display = 'block';
         errDisp.innerText = 'SYSTEM_ERROR: ' + msg;
       }
-      window.onerror = (msg, url, line) => showError(`${msg} at ${url}:${line}`);
-      window.onunhandledrejection = (event) => showError(`Promise Rejection: ${event.reason}`);
 
-      // Register Service Worker for PWA functionality
+      window.onerror = (msg, url, line, col, error) => {
+        showError(`${msg}\nFile: ${url}\nLine: ${line}:${col}`);
+      };
+
+      window.onunhandledrejection = (event) => {
+        showError(`Promise Rejection: ${event.reason}`);
+      };
+
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('./sw.js').then(reg => {
+            console.log("SW_REGISTERED");
             reg.onupdatefound = () => {
               const installingWorker = reg.installing;
               installingWorker.onstatechange = () => {
                 if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  console.log("SW_UPDATE_FOUND: Reloading for fresh session...");
                   window.location.reload();
                 }
               };
             };
           }).catch(err => {
-            console.log('ServiceWorker registration failed: ', err);
+            console.warn('SW_FAILED: ', err);
           });
         });
       }
     </script>
     <!-- Transpile TSX on the fly with Babel for Zero-Build deployment -->
-    <script type="text/babel" data-presets="react,typescript" data-type="module" src="index.tsx"></script>
+    <script type="text/babel" data-presets="react,typescript" data-type="module" src="./index.tsx"></script>
 </body>
 </html>
