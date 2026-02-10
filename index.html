@@ -78,9 +78,7 @@
     "react": "https://esm.sh/react@19.0.0",
     "react-dom": "https://esm.sh/react-dom@19.0.0",
     "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
-    "lucide-react": "https://esm.sh/lucide-react@0.460.0?external=react",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "react/": "https://esm.sh/react@^19.2.4/"
+    "lucide-react": "https://esm.sh/lucide-react@0.460.0?external=react"
   }
 }
 </script>
@@ -88,6 +86,15 @@
 <body>
     <div id="root"></div>
     <div id="error-display"></div>
+    
+    <!-- Using type="text/babel" and data-type="module" to handle JSX and ESM imports in-browser -->
+    <script 
+      type="text/babel" 
+      data-type="module" 
+      data-presets="react,typescript" 
+      src="./index.tsx">
+    </script>
+
     <script>
       const errDisp = document.getElementById('error-display');
       function showError(msg) {
@@ -98,15 +105,10 @@
       window.onunhandledrejection = (event) => showError(`Promise Rejection: ${event.reason}`);
 
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./sw.js').catch(console.error);
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js').catch(console.error);
+        });
       }
-
-      // Load main entry point via Babel transformer
-      const script = document.createElement('script');
-      script.type = 'text/babel';
-      script.dataset.presets = 'react,typescript';
-      script.src = './index.tsx';
-      document.body.appendChild(script);
     </script>
 </body>
 </html>
