@@ -1,6 +1,6 @@
 
 import React, { useMemo } from 'react';
-import { MIDI_NOTES } from '../types';
+import { MIDI_NOTES } from '../types.ts';
 
 interface PianoKeyboardProps {
   onNoteOn: (midi: number) => void;
@@ -9,7 +9,6 @@ interface PianoKeyboardProps {
   activeNotes: Set<number>;
 }
 
-// Visual mapping for labels
 const KEY_LABELS: Record<number, string> = {
   60: 'A', 61: 'W', 62: 'S', 63: 'E', 64: 'D', 65: 'F', 66: 'T', 67: 'G', 
   68: 'Y', 69: 'H', 70: 'U', 71: 'J', 72: 'K', 73: 'O', 74: 'L', 75: 'P', 
@@ -17,8 +16,8 @@ const KEY_LABELS: Record<number, string> = {
 };
 
 const PianoKeyboard: React.FC<PianoKeyboardProps> = ({ onNoteOn, onNoteOff, mappedNotes, activeNotes }) => {
-  const startNote = 48; // C3
-  const endNote = 84;   // C6
+  const startNote = 48;
+  const endNote = 84;
   
   const keys = useMemo(() => {
     const list = [];
