@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'chirpsynth-v1.4';
+const CACHE_NAME = 'chirpsynth-v1.5';
 const ASSETS = [
   './',
   './index.html',
@@ -9,10 +9,7 @@ const ASSETS = [
   './manifest.json',
   './services/dspService.ts',
   './components/PianoKeyboard.tsx',
-  './components/SampleList.tsx',
-  'https://cdn.tailwindcss.com',
-  'https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.all.min.js',
-  'https://unpkg.com/@babel/standalone/babel.min.js'
+  './components/SampleList.tsx'
 ];
 
 self.addEventListener('install', (event) => {
@@ -39,6 +36,15 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+  // Bypass cache for local files to avoid "dark screen" cache issues
+  if (url.origin === location.origin) {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((response) => {
       return response || fetch(event.request);
